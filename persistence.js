@@ -5,6 +5,12 @@ var Redis = require('ioredis')
 var through = require('through2')
 var throughv = require('throughv')
 var msgpack = require('msgpack-lite')
+var Qlobber = require('qlobber').Qlobber
+var qlobberOpts = {
+  separator: '/',
+  wildcard_one: '+',
+  wildcard_some:  '#'
+}
 
 function RedisPersistence (opts) {
   if (!(this instanceof RedisPersistence)) {
@@ -34,9 +40,26 @@ RedisPersistence.prototype.storeRetained = function (packet, cb) {
   }
 }
 
+function checkAndSplit (prefix, pattern) {
+  var qlobber = new Qlobber(qlobberOpts)
+  qlobber.add(pattern, true)
+
+  // TODO use ctor
+  var instance = through.obj(splitArray)
+
+  instance._qlobber = qlobber
+  instance._prefix = prefix
+
+  return instance
+}
+
 function splitArray (keys, enc, cb) {
-  for (var i = 0; i < keys.length; i++) {
-    this.push(keys[i])
+  var prefix = this._prefix.length
+  for (var i = 0, l = keys.length; i < l; i++) {
+    var key = keys[i].slice(prefix)
+    if (this._qlobber.match(key).length > 0) {
+      this.push(keys[i])
+    }
   }
   cb()
 }
@@ -45,7 +68,7 @@ RedisPersistence.prototype.createRetainedStream = function (pattern) {
   return this._db.scanStream({
     match: 'retained:' + pattern.split(/[#+]/)[0] + '*',
     count: 100
-  }).pipe(through.obj(splitArray))
+  }).pipe(checkAndSplit('retained:', pattern))
     .pipe(throughv.obj(this._decodeAndAugment))
 }
 
