@@ -1,0 +1,40 @@
+{
+  "name": "aedes-persistence-redis",
+  "version": "0.0.1",
+  "description": "Aedes persistence, backed by redis ",
+  "main": "persistence.js",
+  "scripts": {
+    "test": "tape test.js | faucet"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mcollina/aedes-persistence-redis.git"
+  },
+  "keywords": [
+    "mqtt",
+    "broker",
+    "aedes",
+    "mosca"
+  ],
+  "author": "Matteo Collina <hello@matteocollina.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/mcollina/aedes-persistence-redis/issues"
+  },
+  "homepage": "https://github.com/mcollina/aedes-persistence-redis#readme",
+  "devDependencies": {
+    "faucet": "0.0.1",
+    "pre-commit": "^1.1.2",
+    "standard": "^5.4.1",
+    "tape": "^4.2.2"
+  },
+  "dependencies": {
+    "aedes-packet": "^1.0.0",
+    "aedes-persistence": "^1.0.1",
+    "ioredis": "^1.12.2",
+    "msgpack-lite": "^0.1.14",
+    "qlobber": "^0.5.3",
+    "through2": "^2.0.0",
+    "throughv": "^1.0.3"
+  }
+}
