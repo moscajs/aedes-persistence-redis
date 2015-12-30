@@ -1,10 +1,19 @@
 'use strict'
 
 var test = require('tape').test
-var redis = require('./')
+var persistence = require('./')
+var Redis = require('ioredis')
 var abs = require('aedes-persistence/abstract')
+var db = new Redis()
+
+db.on('connect', function() {
+  db.connector.stream.unref()
+})
 
 abs({
   test: test,
-  persistence: redis
+  persistence: function () {
+    db.flushall()
+    return persistence()
+  }
 })

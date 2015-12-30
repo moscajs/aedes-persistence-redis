@@ -31,6 +31,7 @@
   "dependencies": {
     "aedes-packet": "^1.0.0",
     "aedes-persistence": "^1.0.1",
+    "callback-stream": "^1.1.0",
     "ioredis": "^1.12.2",
     "msgpack-lite": "^0.1.14",
     "qlobber": "^0.5.3",
