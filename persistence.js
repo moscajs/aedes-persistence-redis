@@ -7,7 +7,7 @@ var throughv = require('throughv')
 var msgpack = require('msgpack-lite')
 var pump = require('pump')
 var EventEmitter = require('events').EventEmitter
-var inherits = require('inherits')
+var inherits = require('util').inherits
 var Qlobber = require('qlobber').Qlobber
 var qlobberOpts = {
   separator: '/',
