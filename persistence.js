@@ -9,6 +9,7 @@ var pump = require('pump')
 var EventEmitter = require('events').EventEmitter
 var inherits = require('util').inherits
 var Qlobber = require('qlobber').Qlobber
+var nextTick = require('process-nextick-args')
 var qlobberOpts = {
   separator: '/',
   wildcard_one: '+',
@@ -86,7 +87,7 @@ inherits(RedisPersistence, EventEmitter)
 RedisPersistence.prototype._getPipeline = function() {
   if (!this._pipeline) {
     this._pipeline = this._db.pipeline()
-    process.nextTick(execPipeline, this)
+    nextTick(execPipeline, this)
   }
   return this._pipeline
 }
