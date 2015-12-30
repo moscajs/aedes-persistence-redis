@@ -16,8 +16,8 @@ var qlobberOpts = {
 }
 var offlineClientsCountKey = 'counter:offline:clients'
 var offlineSubscriptionsCountKey = 'counter:offline:subscriptions'
-var newSubTopic = 'SYS$/newsub'
-var rmSubTopic = 'SYS$/rmsub'
+var newSubTopic = 'SYS$/sub/add'
+var rmSubTopic = 'SYS$/sub/rm'
 
 function RedisPersistence (opts) {
   if (!(this instanceof RedisPersistence)) {
@@ -41,20 +41,34 @@ function RedisPersistence (opts) {
   this._matcher = null
   this._ready = false
   this._destroyed = false
-  this._setup()
 
-  this._sub.subscribe(newSubTopic)
+  this._waiting = {}
+  this._sub.subscribe(newSubTopic, function (err) {
+    if (err) {
+      that.emit('error', err)
+      return
+    }
+    that._setup()
+  })
+  this._sub.subscribe(rmSubTopic)
   this._sub.on('messageBuffer', function (channel, buf) {
-    console.log('new message on', channel)
-    if (channel === newSubTopic) {
+    channel = channel.toString()
+    if (channel.indexOf('SYS$/sub' === 0)) {
       var decoded = msgpack.decode(buf)
-      that._matcher.add(decoded.topic, decoded)
-    } else if (channel === rmSubTopic) {
-      var decoded = msgpack.decode(buf)
-      that._matcher
-        .match(decoded.topic)
-        .filter(matching, decoded.topic)
-        .forEach(rmSub, that._matcher)
+      if (channel === newSubTopic) {
+        that._matcher.add(decoded.topic, decoded)
+      } else if (channel === rmSubTopic) {
+        that._matcher
+          .match(decoded.topic)
+          .filter(matching, decoded.topic)
+          .forEach(rmSub, that._matcher)
+      }
+      var key = decoded.clientId + '-' + decoded.topic
+      var cb = that._waiting[key]
+      delete that._waiting[key]
+      if (cb) {
+        process.nextTick(cb)
+      }
     }
   })
 }
@@ -135,6 +149,11 @@ function Sub (clientId, topic, qos) {
 }
 
 RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
+  if (!this._ready) {
+    this.once('ready', this.addSubscriptions.bind(this, client, subs, cb))
+    return
+  }
+
   var multi = this._db.multi()
 
   var clientSubKey = "client:sub:" + client.id
@@ -145,6 +164,8 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
   multi.hmset(clientSubKey, toStore)
 
   var count = 0
+  var published = 0
+  var errored = null
 
   subs.forEach(function (sub) {
     if (sub.qos > 0) {
@@ -153,39 +174,64 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
       multi.hset(subClientKey, client.id, encoded)
       multi.publish(newSubTopic, encoded)
       count++
+      that._waiting[client.id + '-' + sub.topic] = finish
     }
   })
 
   multi.exec(function (err, results) {
+    if (err) {
+      errored = true
+      return cb(err, client)
+    }
+
     var existed = results.length > 0 && results[0][1] > 0
     var pipeline = that._getPipeline()
     if (!existed)
       pipeline.incr(offlineClientsCountKey)
 
-    pipeline.incrby(offlineSubscriptionsCountKey, count)
-    cb(err, client)
+    pipeline.incrby(offlineSubscriptionsCountKey, count, finish)
   })
+
+  function finish () {
+    published++
+    if (published === count + 1 && !errored) {
+      cb(null, client)
+    }
+  }
 }
 
 RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
+  if (!this._ready) {
+    this.once('ready', this.removeSubscriptions.bind(this, client, subs, cb))
+    return
+  }
+
   var clientSubKey = "client:sub:" + client.id
 
   var that = this
   var multi = this._db.multi()
   multi.hgetall(clientSubKey)
+  var published = 0
+  var count = 0
+  var errored = false
 
-  subs.reduce(function (multi, sub) {
-    var subClientKey = 'sub:client:' + sub.topic
+  subs.reduce(function (multi, topic) {
+    var subClientKey = 'sub:client:' + topic
     multi.hdel(subClientKey, client.id)
     multi.publish(rmSubTopic, msgpack.encode({
-      topic: sub.topic,
+      topic: topic,
       clientId: client.id
     }))
-    return multi.hdel(clientSubKey, sub)
+    that._waiting[client.id + '-' + topic] = finish
+    count++
+    return multi.hdel(clientSubKey, topic)
   }, multi)
 
   multi.exec(function (err, results) {
-    if (err) { return cb(err) }
+    if (err) {
+      errored = true
+      return cb(err)
+    }
 
     var prev = 0
     var skipped = 0
@@ -195,10 +241,15 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
       }
     }
     var pipeline = that._getPipeline()
-    pipeline.decrby(offlineSubscriptionsCountKey, subs.length - skipped)
-
-    cb(null, client)
+    pipeline.decrby(offlineSubscriptionsCountKey, subs.length - skipped, finish)
   })
+
+  function finish () {
+    published++
+    if (published === count + 1 && !errored) {
+      cb(null, client)
+    }
+  }
 }
 
 RedisPersistence.prototype.subscriptionsByClient = function (client, cb) {
@@ -296,29 +347,16 @@ RedisPersistence.prototype._setup = function () {
 }
 
 RedisPersistence.prototype.cleanSubscriptions = function (client, cb) {
-  var clientSubKey = "client:sub:" + client.id
-  var pipeline = this._getPipeline()
   var that = this
-  pipeline.hgetallBuffer(clientSubKey, function (err, subs) {
-    if (err) { return cb(err) }
-
-    var multi = that._db.multi()
-
-    multi.del(clientSubKey)
-
-    Object.keys(subs).forEach(function (topic) {
-      var subClientKey = 'sub:client:' + topic
-      multi.hdel(subClientKey, client.id)
-      multi.publish(rmSubTopic, msgpack.encode({
-        topic: topic,
-        clientId: client.id
-      }))
-    })
-
-    multi.exec(function (err) {
-      cb(err, client)
-    })
+  this.subscriptionsByClient(client, function (err, subs, client) {
+    if (err) { return cb(err) }
+    subs = subs.map(subToTopic)
+    that.removeSubscriptions(client, subs, cb)
   })
+}
+
+function subToTopic (sub) {
+  return sub.topic
 }
 
 RedisPersistence.prototype.outgoingEnqueue = function (sub, packet, cb) {
@@ -495,8 +533,9 @@ RedisPersistence.prototype.destroy = function (cb) {
   this._destroyed = true
   this._db.disconnect()
   this._sub.disconnect()
+
   if (cb) {
-    cb(null)
+    this._sub.on('end', cb)
   }
 }
 
