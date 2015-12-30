@@ -31,9 +31,9 @@
   "dependencies": {
     "aedes-packet": "^1.0.0",
     "aedes-persistence": "^1.0.1",
-    "callback-stream": "^1.1.0",
     "ioredis": "^1.12.2",
     "msgpack-lite": "^0.1.14",
+    "pump": "^1.0.1",
     "qlobber": "^0.5.3",
     "through2": "^2.0.0",
     "throughv": "^1.0.3"

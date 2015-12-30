@@ -5,7 +5,9 @@ var Redis = require('ioredis')
 var through = require('through2')
 var throughv = require('throughv')
 var msgpack = require('msgpack-lite')
-var callbackStream = require('callback-stream')
+var pump = require('pump')
+var EventEmitter = require('events').EventEmitter
+var inherits = require('inherits')
 var Qlobber = require('qlobber').Qlobber
 var qlobberOpts = {
   separator: '/',
@@ -14,6 +16,8 @@ var qlobberOpts = {
 }
 var offlineClientsCountKey = 'counter:offline:clients'
 var offlineSubscriptionsCountKey = 'counter:offline:subscriptions'
+var newSubTopic = 'SYS$/newsub'
+var rmSubTopic = 'SYS$/rmsub'
 
 function RedisPersistence (opts) {
   if (!(this instanceof RedisPersistence)) {
@@ -21,6 +25,7 @@ function RedisPersistence (opts) {
   }
 
   this._db = new Redis(opts)
+  this._sub = new Redis(opts)
   this._pipeline = null
 
   var that = this
@@ -33,7 +38,36 @@ function RedisPersistence (opts) {
       cb(err, decoded)
     })
   }
+  this._matcher = null
+  this._ready = false
+  this._destroyed = false
+  this._setup()
+
+  this._sub.subscribe(newSubTopic)
+  this._sub.on('messageBuffer', function (channel, buf) {
+    console.log('new message on', channel)
+    if (channel === newSubTopic) {
+      var decoded = msgpack.decode(buf)
+      that._matcher.add(decoded.topic, decoded)
+    } else if (channel === rmSubTopic) {
+      var decoded = msgpack.decode(buf)
+      that._matcher
+        .match(decoded.topic)
+        .filter(matching, decoded.topic)
+        .forEach(rmSub, that._matcher)
+    }
+  })
 }
+
+function matching (sub) {
+  return sub.topic === this
+}
+
+function rmSub (sub) {
+  this.remove(sub.topic, sub)
+}
+
+inherits(RedisPersistence, EventEmitter)
 
 RedisPersistence.prototype._getPipeline = function() {
   if (!this._pipeline) {
@@ -94,6 +128,12 @@ function asKeyValuePair (acc, sub) {
   return acc
 }
 
+function Sub (clientId, topic, qos) {
+  this.clientId = clientId
+  this.topic = topic
+  this.qos = qos
+}
+
 RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
   var multi = this._db.multi()
 
@@ -109,8 +149,9 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
   subs.forEach(function (sub) {
     if (sub.qos > 0) {
       var subClientKey = 'sub:client:' + sub.topic
-      var encoded = msgpack.encode(sub)
+      var encoded = msgpack.encode(new Sub(client.id, sub.topic, sub.qos))
       multi.hset(subClientKey, client.id, encoded)
+      multi.publish(newSubTopic, encoded)
       count++
     }
   })
@@ -136,6 +177,10 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
   subs.reduce(function (multi, sub) {
     var subClientKey = 'sub:client:' + sub.topic
     multi.hdel(subClientKey, client.id)
+    multi.publish(rmSubTopic, msgpack.encode({
+      topic: sub.topic,
+      clientId: client.id
+    }))
     return multi.hdel(clientSubKey, sub)
   }, multi)
 
@@ -144,7 +189,7 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
 
     var prev = 0
     var skipped = 0
-    for (var i = 1; i < results.length; i += 2) {
+    for (var i = 1; i < results.length; i += 3) {
       if (results[i] === '0') {
         skipped++
       }
@@ -196,37 +241,58 @@ RedisPersistence.prototype.countOffline = function (cb) {
 }
 
 RedisPersistence.prototype.subscriptionsByTopic = function (topic, cb) {
+  if (!this._ready) {
+    this.once('ready', this.subscriptionsByTopic.bind(this, topic, cb))
+    return this
+  }
+
+  var result = this._matcher.match(topic)
+
+  cb(null, result)
+}
+
+RedisPersistence.prototype._setup = function () {
+  if (this._ready) {
+    return
+  }
+
   var that = this
   var prefix = 'sub:client:'
-  this._db.scanStream({
+
+  this._matcher = new Qlobber(qlobberOpts)
+
+  var scanStream = this._db.scanStream({
     match: prefix + '*',
     count: 100
   })
-  .pipe(through.obj(function (keys, enc, cb) {
-    for (var i = 0, l = keys.length; i < l; i++) {
-      var key = keys[i].slice(prefix.length)
-      var qlobber = new Qlobber(qlobberOpts)
-      qlobber.add(key)
-      if (qlobber.match(topic).length > 0) {
-        this.push(keys[i])
-      }
-    }
-    cb()
-  }))
-  .pipe(throughv.obj(function (chunk, enc, cb) {
+  var splitStream = through.obj(split)
+  var hgetallStream = throughv.obj(function (chunk, enc, cb) {
     var pipeline = that._getPipeline()
     pipeline.hgetallBuffer(chunk, cb)
-  }))
-  .pipe(through.obj(function (all, enc, cb) {
-    var that = this
-    Object.keys(all).forEach(function (key) {
-      var decoded = msgpack.decode(all[key])
-      decoded.clientId = key
-      that.push(decoded)
-    })
-    cb()
-  }))
-  .pipe(callbackStream.obj(cb))
+  }, function (cb) {
+    that._ready = true
+    that.emit('ready')
+  })
+  .on('data', function (all) {
+    Object.keys(all).forEach(insert, all)
+  })
+
+  pump(scanStream, splitStream, hgetallStream, function (err) {
+    if (that._destroyed) {
+      return
+    }
+
+    if (err) {
+      that.emit('error', err)
+    }
+  })
+
+  function insert (key) {
+    var decoded = msgpack.decode(this[key])
+    decoded.clientId = key
+
+    that._matcher.add(decoded.topic, decoded)
+  }
 }
 
 RedisPersistence.prototype.cleanSubscriptions = function (client, cb) {
@@ -243,6 +309,10 @@ RedisPersistence.prototype.cleanSubscriptions = function (client, cb) {
     Object.keys(subs).forEach(function (topic) {
       var subClientKey = 'sub:client:' + topic
       multi.hdel(subClientKey, client.id)
+      multi.publish(rmSubTopic, msgpack.encode({
+        topic: topic,
+        clientId: client.id
+      }))
     })
 
     multi.exec(function (err) {
@@ -422,7 +492,9 @@ RedisPersistence.prototype.streamWill = function (brokers) {
 }
 
 RedisPersistence.prototype.destroy = function (cb) {
+  this._destroyed = true
   this._db.disconnect()
+  this._sub.disconnect()
   if (cb) {
     cb(null)
   }
