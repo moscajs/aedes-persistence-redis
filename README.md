@@ -1,2 +1,13 @@
 # aedes-persistence-redis
-Aedes persistence, backed by redis
+
+[Aedes][aedes] [persistence][persistence], backed by [Redis][redis].
+
+See [aedes-persistence][persistence] for the full API, and [Aedes][aedes] for usage.
+
+## License
+
+MIT
+
+[aedes]: https://github.com/mcollina/aedes
+[persistence]: https://github.com/mcollina/aedes-persistence
+[redis]: http://redis.io
