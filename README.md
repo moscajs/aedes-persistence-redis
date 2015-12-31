@@ -1,4 +1,4 @@
-# aedes-persistence-redis
+# aedes-persistence-redis&nbsp;&nbsp;[![Build Status](https://travis-ci.org/mcollina/aedes-persistence-redis.svg)](https://travis-ci.org/mcollina/aedes-persistence-redis)
 
 [Aedes][aedes] [persistence][persistence], backed by [Redis][redis].
 
