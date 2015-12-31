@@ -39,5 +39,8 @@
     "qlobber": "^0.5.3",
     "through2": "^2.0.0",
     "throughv": "^1.0.3"
+  },
+  "optionalDependencies": {
+    "hiredis": "^0.4.1"
   }
 }
