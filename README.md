@@ -4,6 +4,23 @@
 
 See [aedes-persistence][persistence] for the full API, and [Aedes][aedes] for usage.
 
+## Install
+
+```
+npm i aedes aedes-persistence-redis --save
+```
+
+## API
+
+<a name="constructor"></a>
+### aedesPersistenceRedis([opts])
+
+Creates a new instance of aedes-persistence-redis.
+It takes all the same options of [ioredis](http://npm.im/ioredis),
+which is used internally to connect to Redis.
+
+This constructor creates two connections to Redis.
+
 ## License
 
 MIT
