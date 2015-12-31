@@ -61,7 +61,7 @@ function RedisPersistence (opts) {
       } else if (channel === rmSubTopic) {
         that._matcher
           .match(decoded.topic)
-          .filter(matching, decoded.topic)
+          .filter(matching, decoded)
           .forEach(rmSub, that._matcher)
       }
       var key = decoded.clientId + '-' + decoded.topic
@@ -75,7 +75,7 @@ function RedisPersistence (opts) {
 }
 
 function matching (sub) {
-  return sub.topic === this
+  return sub.topic === this.topic
 }
 
 function rmSub (sub) {
