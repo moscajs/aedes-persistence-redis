@@ -350,7 +350,7 @@ RedisPersistence.prototype._setup = function () {
 RedisPersistence.prototype.cleanSubscriptions = function (client, cb) {
   var that = this
   this.subscriptionsByClient(client, function (err, subs, client) {
-    if (err) { return cb(err) }
+    if (err || !subs) { return cb(err, client) }
     subs = subs.map(subToTopic)
     that.removeSubscriptions(client, subs, cb)
   })
