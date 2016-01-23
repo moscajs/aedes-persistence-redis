@@ -25,13 +25,14 @@
   "devDependencies": {
     "concat-stream": "^1.5.1",
     "faucet": "0.0.1",
+    "mqemitter-redis": "^1.0.1",
     "pre-commit": "^1.1.2",
     "standard": "^5.4.1",
     "tape": "^4.2.2"
   },
   "dependencies": {
     "aedes-packet": "^1.0.0",
-    "aedes-persistence": "^1.0.1",
+    "aedes-persistence": "^1.2.0",
     "ioredis": "^1.12.2",
     "msgpack-lite": "^0.1.14",
     "process-nextick-args": "^1.0.6",
