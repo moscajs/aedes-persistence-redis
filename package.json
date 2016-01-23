@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "aedes-packet": "^1.0.0",
-    "aedes-persistence": "^1.2.0",
+    "aedes-persistence": "^1.2.2",
     "ioredis": "^1.12.2",
     "msgpack-lite": "^0.1.14",
     "process-nextick-args": "^1.0.6",

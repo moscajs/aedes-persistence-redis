@@ -29,6 +29,15 @@ abs({
   }
 })
 
+function toBroker (id, emitter) {
+  return {
+    id: '1',
+    publish: emitter.emit.bind(emitter),
+    subscribe: emitter.on.bind(emitter),
+    unsubscribe: emitter.removeListener.bind(emitter)
+  }
+}
+
 test('multiple persistences', function (t) {
   t.plan(7)
   db.flushall()
@@ -36,16 +45,8 @@ test('multiple persistences', function (t) {
   var emitter2 = mqemitterRedis()
   var instance = persistence()
   var instance2 = persistence()
-  instance.broker = {
-    id: '1',
-    publish: emitter.emit.bind(emitter),
-    subscribe: emitter.on.bind(emitter)
-  }
-  instance2.broker = {
-    id: '2',
-    publish: emitter2.emit.bind(emitter2),
-    subscribe: emitter2.on.bind(emitter2)
-  }
+  instance.broker = toBroker('1', emitter)
+  instance2.broker = toBroker('2', emitter2)
   var client = { id: 'multipleTest' }
   var subs = [{
     topic: 'hello',

@@ -44,6 +44,26 @@ function RedisPersistence (opts) {
   this._destroyed = false
 
   this._waiting = {}
+
+  this._onMessage = function onSubMessage (packet, cb) {
+    var decoded = msgpack.decode(packet.payload)
+    console.log(decoded)
+    if (packet.topic === newSubTopic) {
+      that._matcher.add(decoded.topic, decoded)
+    } else if (packet.topic === rmSubTopic) {
+      that._matcher
+        .match(decoded.topic)
+        .filter(matching, decoded)
+        .forEach(rmSub, that._matcher)
+    }
+    var key = decoded.clientId + '-' + decoded.topic
+    var waiting = that._waiting[key]
+    delete that._waiting[key]
+    if (waiting) {
+      process.nextTick(waiting)
+    }
+    cb()
+  }
 }
 
 function matching (sub) {
@@ -62,28 +82,7 @@ Object.defineProperty(RedisPersistence.prototype, 'broker', {
   },
   set: function (broker) {
     this._broker = broker
-
-    var that = this
-    broker.subscribe(subTopic, function (packet, cb) {
-      var decoded = msgpack.decode(packet.payload)
-      if (packet.topic === newSubTopic) {
-        that._matcher.add(decoded.topic, decoded)
-      } else if (packet.topic === rmSubTopic) {
-        that._matcher
-          .match(decoded.topic)
-          .filter(matching, decoded)
-          .forEach(rmSub, that._matcher)
-      }
-      var key = decoded.clientId + '-' + decoded.topic
-      var waiting = that._waiting[key]
-      delete that._waiting[key]
-      if (waiting) {
-        process.nextTick(waiting)
-      }
-      cb()
-    }, function () {
-      that._setup()
-    })
+    broker.subscribe(subTopic, this._onMessage, this._setup.bind(this))
   }
 })
 
@@ -537,12 +536,15 @@ RedisPersistence.prototype.streamWill = function (brokers) {
 }
 
 RedisPersistence.prototype.destroy = function (cb) {
+  var that = this
   this._destroyed = true
-  this._db.disconnect()
+  this.broker.unsubscribe(subTopic, this._onMessage, function () {
+    that._db.disconnect()
 
-  if (cb) {
-    this._db.on('end', cb)
-  }
+    if (cb) {
+      that._db.on('end', cb)
+    }
+  })
 }
 
 module.exports = RedisPersistence
