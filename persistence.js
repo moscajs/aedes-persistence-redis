@@ -39,7 +39,8 @@ function RedisPersistence (opts) {
       cb(err, decoded)
     })
   }
-  this._matcher = null
+
+  this._matcher = new Qlobber(qlobberOpts)
   this._ready = false
   this._destroyed = false
 
@@ -314,8 +315,6 @@ RedisPersistence.prototype._setup = function () {
 
   var that = this
   var prefix = 'sub:client:'
-
-  this._matcher = new Qlobber(qlobberOpts)
 
   var scanStream = this._db.scanStream({
     match: prefix + '*',
