@@ -49,7 +49,6 @@ function RedisPersistence (opts) {
   this._onMessage = function onSubMessage (packet, cb) {
     var decoded = msgpack.decode(packet.payload)
     if (packet.topic === newSubTopic) {
-      console.log('adding', that.broker.id, decoded)
       that._matcher.add(decoded.topic, decoded)
     } else if (packet.topic === rmSubTopic) {
       that._matcher
@@ -299,13 +298,11 @@ RedisPersistence.prototype.countOffline = function (cb) {
 
 RedisPersistence.prototype.subscriptionsByTopic = function (topic, cb) {
   if (!this._ready) {
-    console.log('waiting', this.broker.id)
     this.once('ready', this.subscriptionsByTopic.bind(this, topic, cb))
     return this
   }
 
   var result = this._matcher.match(topic)
-  console.log(topic, result)
 
   cb(null, result)
 }
