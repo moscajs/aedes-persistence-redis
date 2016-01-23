@@ -31,7 +31,7 @@ abs({
 
 function toBroker (id, emitter) {
   return {
-    id: '1',
+    id: id,
     publish: emitter.emit.bind(emitter),
     subscribe: emitter.on.bind(emitter),
     unsubscribe: emitter.removeListener.bind(emitter)
@@ -47,6 +47,7 @@ test('multiple persistences', function (t) {
   var instance2 = persistence()
   instance.broker = toBroker('1', emitter)
   instance2.broker = toBroker('2', emitter2)
+
   var client = { id: 'multipleTest' }
   var subs = [{
     topic: 'hello',
@@ -59,23 +60,25 @@ test('multiple persistences', function (t) {
     qos: 1
   }]
 
-  instance.addSubscriptions(client, subs, function (err) {
-    t.notOk(err, 'no error')
-    instance2.subscriptionsByTopic('hello', function (err, resubs) {
+  instance2.on('ready', function () {
+    instance.addSubscriptions(client, subs, function (err) {
       t.notOk(err, 'no error')
-      t.deepEqual(resubs, [{
-        clientId: client.id,
-        topic: 'hello/#',
-        qos: 1
-      }, {
-        clientId: client.id,
-        topic: 'hello',
-        qos: 1
-      }])
-      instance.destroy(t.pass.bind(t, 'first dies'))
-      instance2.destroy(t.pass.bind(t, 'second dies'))
-      emitter.close(t.pass.bind(t, 'first emitter dies'))
-      emitter2.close(t.pass.bind(t, 'second emitter dies'))
+      instance2.subscriptionsByTopic('hello', function (err, resubs) {
+        t.notOk(err, 'no error')
+        t.deepEqual(resubs, [{
+          clientId: client.id,
+          topic: 'hello/#',
+          qos: 1
+        }, {
+          clientId: client.id,
+          topic: 'hello',
+          qos: 1
+        }])
+        instance.destroy(t.pass.bind(t, 'first dies'))
+        instance2.destroy(t.pass.bind(t, 'second dies'))
+        emitter.close(t.pass.bind(t, 'first emitter dies'))
+        emitter2.close(t.pass.bind(t, 'second emitter dies'))
+      })
     })
   })
 })
