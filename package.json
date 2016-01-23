@@ -25,6 +25,7 @@
   "devDependencies": {
     "concat-stream": "^1.5.1",
     "faucet": "0.0.1",
+    "mqemitter": "^1.0.0",
     "mqemitter-redis": "^1.0.1",
     "pre-commit": "^1.1.2",
     "standard": "^5.4.1",
