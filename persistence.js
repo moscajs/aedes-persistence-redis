@@ -372,15 +372,6 @@ function updateWithBrokerData (that, client, packet, cb) {
   var prekey = 'outgoing:' + client.id + ':' + packet.brokerId + ':' + packet.brokerCounter
   var postkey = 'outgoing-id:' + client.id + ':' + packet.messageId
 
-  that._db.getBuffer(prekey, function (err, buf) {
-    if (err || !buf) { return }
-    var decoded = msgpack.decode(buf)
-    if (decoded.messageId > 0) {
-      var todel = 'outgoing-id:' + client.id + ':' + decoded.messageId
-      that._getPipeline().del(todel)
-    }
-  })
-
   var multi = that._db.multi()
   multi.set(postkey, msgpack.encode(packet))
   multi.set(prekey, msgpack.encode(packet))
