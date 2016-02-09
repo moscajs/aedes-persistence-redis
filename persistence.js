@@ -1,12 +1,12 @@
 'use strict'
 
-var Packet = require('aedes-packet')
 var Redis = require('ioredis')
 var through = require('through2')
 var throughv = require('throughv')
 var msgpack = require('msgpack-lite')
 var pump = require('pump')
-var EventEmitter = require('events').EventEmitter
+var CachedPersistence = require('aedes-cached-persistence')
+var Packet = CachedPersistence.Packet
 var inherits = require('util').inherits
 var Qlobber = require('qlobber').Qlobber
 var nextTick = require('process-nextick-args')
@@ -17,9 +17,6 @@ var qlobberOpts = {
 }
 var offlineClientsCountKey = 'counter:offline:clients'
 var offlineSubscriptionsCountKey = 'counter:offline:subscriptions'
-var newSubTopic = '$SYS/sub/add'
-var rmSubTopic = '$SYS/sub/rm'
-var subTopic = '$SYS/sub/+'
 
 function RedisPersistence (opts) {
   if (!(this instanceof RedisPersistence)) {
@@ -40,51 +37,10 @@ function RedisPersistence (opts) {
     })
   }
 
-  this._matcher = new Qlobber(qlobberOpts)
-  this._ready = false
-  this._destroyed = false
-
-  this._waiting = {}
-
-  this._onMessage = function onSubMessage (packet, cb) {
-    var decoded = msgpack.decode(packet.payload)
-    if (packet.topic === newSubTopic) {
-      that._matcher.add(decoded.topic, decoded)
-    } else if (packet.topic === rmSubTopic) {
-      that._matcher
-        .match(decoded.topic)
-        .filter(matching, decoded)
-        .forEach(rmSub, that._matcher)
-    }
-    var key = decoded.clientId + '-' + decoded.topic
-    var waiting = that._waiting[key]
-    delete that._waiting[key]
-    if (waiting) {
-      process.nextTick(waiting)
-    }
-    cb()
-  }
+  CachedPersistence.call(this, opts)
 }
 
-function matching (sub) {
-  return sub.topic === this.topic
-}
-
-function rmSub (sub) {
-  this.remove(sub.topic, sub)
-}
-
-inherits(RedisPersistence, EventEmitter)
-
-Object.defineProperty(RedisPersistence.prototype, 'broker', {
-  get: function () {
-    return this._broker
-  },
-  set: function (broker) {
-    this._broker = broker
-    broker.subscribe(subTopic, this._onMessage, this._setup.bind(this))
-  }
-})
+inherits(RedisPersistence, CachedPersistence)
 
 RedisPersistence.prototype._getPipeline = function() {
   if (!this._pipeline) {
@@ -152,7 +108,7 @@ function Sub (clientId, topic, qos) {
 }
 
 RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
-  if (!this._ready) {
+  if (!this.ready) {
     this.once('ready', this.addSubscriptions.bind(this, client, subs, cb))
     return
   }
@@ -176,11 +132,12 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
       var subClientKey = 'sub:client:' + sub.topic
       var encoded = msgpack.encode(new Sub(client.id, sub.topic, sub.qos))
       multi.hset(subClientKey, client.id, encoded)
-      broker.publish(new Packet({ topic: newSubTopic, payload: encoded }))
       count++
-      that._waiting[client.id + '-' + sub.topic] = finish
+      that._waitFor(client, sub.topic, finish)
     }
   })
+
+  this._addedSubscriptions(client, subs)
 
   multi.exec(function (err, results) {
     if (err) {
@@ -205,7 +162,7 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
 }
 
 RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
-  if (!this._ready) {
+  if (!this.ready) {
     this.once('ready', this.removeSubscriptions.bind(this, client, subs, cb))
     return
   }
@@ -223,14 +180,12 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
   subs.reduce(function (multi, topic) {
     var subClientKey = 'sub:client:' + topic
     multi.hdel(subClientKey, client.id)
-    broker.publish(new Packet({ topic: rmSubTopic, payload: msgpack.encode({
-      topic: topic,
-      clientId: client.id
-    })}))
-    that._waiting[client.id + '-' + topic] = finish
+    that._waitFor(client, topic, finish)
     count++
     return multi.hdel(clientSubKey, topic)
   }, multi)
+
+  this._removedSubscriptions(client, subs.map(toSub))
 
   multi.exec(function (err, results) {
     if (err) {
@@ -254,6 +209,12 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
     if (published === count + 1 && !errored) {
       cb(null, client)
     }
+  }
+}
+
+function toSub (topic) {
+  return {
+    topic: topic
   }
 }
 
@@ -297,7 +258,7 @@ RedisPersistence.prototype.countOffline = function (cb) {
 }
 
 RedisPersistence.prototype.subscriptionsByTopic = function (topic, cb) {
-  if (!this._ready) {
+  if (!this.ready) {
     this.once('ready', this.subscriptionsByTopic.bind(this, topic, cb))
     return this
   }
@@ -308,7 +269,7 @@ RedisPersistence.prototype.subscriptionsByTopic = function (topic, cb) {
 }
 
 RedisPersistence.prototype._setup = function () {
-  if (this._ready) {
+  if (this.ready) {
     return
   }
 
@@ -324,7 +285,7 @@ RedisPersistence.prototype._setup = function () {
     var pipeline = that._getPipeline()
     pipeline.hgetallBuffer(chunk, cb)
   }, function (cb) {
-    that._ready = true
+    that.ready = true
     that.emit('ready')
     cb()
   })
@@ -348,19 +309,6 @@ RedisPersistence.prototype._setup = function () {
 
     that._matcher.add(decoded.topic, decoded)
   }
-}
-
-RedisPersistence.prototype.cleanSubscriptions = function (client, cb) {
-  var that = this
-  this.subscriptionsByClient(client, function (err, subs, client) {
-    if (err || !subs) { return cb(err, client) }
-    subs = subs.map(subToTopic)
-    that.removeSubscriptions(client, subs, cb)
-  })
-}
-
-function subToTopic (sub) {
-  return sub.topic
 }
 
 RedisPersistence.prototype.outgoingEnqueue = function (sub, packet, cb) {
@@ -526,8 +474,7 @@ RedisPersistence.prototype.streamWill = function (brokers) {
 
 RedisPersistence.prototype.destroy = function (cb) {
   var that = this
-  this._destroyed = true
-  this.broker.unsubscribe(subTopic, this._onMessage, function () {
+  CachedPersistence.prototype.destroy.call(this, function () {
     that._db.disconnect()
 
     if (cb) {
