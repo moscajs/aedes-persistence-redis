@@ -316,7 +316,7 @@ RedisPersistence.prototype.outgoingEnqueue = function (sub, packet, cb) {
   this._getPipeline().set(key, msgpack.encode(new Packet(packet)), cb)
 }
 
-function updateWithBrokerData (that, client, packet, cb) {
+function updateWithClientData (that, client, packet, cb) {
   var prekey = 'outgoing:' + client.id + ':' + packet.brokerId + ':' + packet.brokerCounter
   var postkey = 'outgoing-id:' + client.id + ':' + packet.messageId
 
@@ -350,12 +350,12 @@ function augmentWithBrokerData (that, client, packet, cb) {
 RedisPersistence.prototype.outgoingUpdate = function (client, packet, cb) {
   var that = this
   if (packet.brokerId) {
-    updateWithBrokerData(this, client, packet, cb)
+    updateWithClientData(this, client, packet, cb)
   } else {
     augmentWithBrokerData(this, client, packet, function (err) {
       if (err) { return cb(err, client, packet) }
 
-      updateWithBrokerData(that, client, packet, cb)
+      updateWithClientData(that, client, packet, cb)
     })
   }
 }
