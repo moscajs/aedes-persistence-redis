@@ -14,7 +14,7 @@ var MatchStream = require('./lib/match')
 var qlobberOpts = {
   separator: '/',
   wildcard_one: '+',
-  wildcard_some:  '#'
+  wildcard_some: '#'
 }
 var offlineClientsCountKey = 'counter:offline:clients'
 var offlineSubscriptionsCountKey = 'counter:offline:subscriptions'
@@ -43,7 +43,7 @@ function RedisPersistence (opts) {
 
 inherits(RedisPersistence, CachedPersistence)
 
-RedisPersistence.prototype._getPipeline = function() {
+RedisPersistence.prototype._getPipeline = function () {
   if (!this._pipeline) {
     this._pipeline = this._db.pipeline()
     nextTick(execPipeline, this)
@@ -117,9 +117,8 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
 
   var multi = this._db.multi()
 
-  var clientSubKey = "client:sub:" + client.id
+  var clientSubKey = 'client:sub:' + client.id
   var that = this
-  var broker = this._broker
 
   var toStore = subs.reduce(asKeyValuePair, {})
   multi.exists(clientSubKey)
@@ -149,8 +148,9 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
 
     var existed = results.length > 0 && results[0][1] > 0
     var pipeline = that._getPipeline()
-    if (!existed)
+    if (!existed) {
       pipeline.incr(offlineClientsCountKey)
+    }
 
     pipeline.incrby(offlineSubscriptionsCountKey, count, finish)
   })
@@ -169,7 +169,7 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
     return
   }
 
-  var clientSubKey = "client:sub:" + client.id
+  var clientSubKey = 'client:sub:' + client.id
 
   var that = this
   var multi = this._db.multi()
@@ -177,7 +177,6 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
   var published = 0
   var count = 0
   var errored = false
-  var broker = this._broker
 
   subs.reduce(function (multi, topic) {
     var subClientKey = 'sub:client:' + topic
@@ -195,7 +194,6 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
       return cb(err)
     }
 
-    var prev = 0
     var skipped = 0
     for (var i = 1; i < results.length; i += 3) {
       if (results[i] === '0') {
@@ -223,8 +221,7 @@ function toSub (topic) {
 RedisPersistence.prototype.subscriptionsByClient = function (client, cb) {
   var pipeline = this._getPipeline()
 
-  var clientSubKey = "client:sub:" + client.id
-  var that = this
+  var clientSubKey = 'client:sub:' + client.id
 
   pipeline.hgetall(clientSubKey, function (err, subs) {
     var toReturn = Object.keys(subs).map(function (sub) {
@@ -241,21 +238,29 @@ RedisPersistence.prototype.countOffline = function (cb) {
   var pipeline = this._getPipeline()
   var subsCount = -1
   var clientsCount = -1
+
   pipeline.get(offlineSubscriptionsCountKey, function (err, count) {
-    if (err) { return cb(err) }
+    if (err) {
+      return cb(err)
+    }
 
     subsCount = parseInt(count)
 
-    if (clientsCount >= 0)
+    if (clientsCount >= 0) {
       cb(null, subsCount, clientsCount)
+    }
   })
+
   pipeline.get(offlineClientsCountKey, function (err, count) {
-    if (err) { return cb(err) }
+    if (err) {
+      return cb(err)
+    }
 
     clientsCount = parseInt(count)
 
-    if (subsCount >= 0)
+    if (subsCount >= 0) {
       cb(null, subsCount, clientsCount)
+    }
   })
 }
 
@@ -342,8 +347,14 @@ function updateWithClientData (that, client, packet, cb) {
 function augmentWithBrokerData (that, client, packet, cb) {
   var postkey = 'outgoing-id:' + client.id + ':' + packet.messageId
   that._getPipeline().getBuffer(postkey, function (err, buf) {
-    if (err) { return cb(err) }
-    if (!buf) { return cb(new Error('no such packet')) }
+    if (err) {
+      return cb(err)
+    }
+
+    if (!buf) {
+      return cb(new Error('no such packet'))
+    }
+
     var decoded = msgpack.decode(buf)
     packet.brokerId = decoded.brokerId
     packet.brokerCounter = decoded.brokerCounter
@@ -368,8 +379,13 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
   var that = this
   var key = 'outgoing-id:' + client.id + ':' + packet.messageId
   this._getPipeline().getBuffer(key, function (err, buf) {
-    if (err) { return cb(err) }
-    if (!buf) { return cb(new Error('no such packet')) }
+    if (err) {
+      return cb(err)
+    }
+
+    if (!buf) {
+      return cb(new Error('no such packet'))
+    }
 
     var packet = msgpack.decode(buf)
     var prekey = 'outgoing:' + client.id + ':' + packet.brokerId + ':' + packet.brokerCounter
@@ -409,8 +425,14 @@ RedisPersistence.prototype.incomingStorePacket = function (client, packet, cb) {
 RedisPersistence.prototype.incomingGetPacket = function (client, packet, cb) {
   var key = 'incoming:' + client.id + ':' + packet.messageId
   this._getPipeline().getBuffer(key, function (err, buf) {
-    if (err) { return cb(err) }
-    if (!buf) { return cb(new Error('no such packet')) }
+    if (err) {
+      return cb(err)
+    }
+
+    if (!buf) {
+      return cb(new Error('no such packet'))
+    }
+
     cb(null, msgpack.decode(buf), client)
   })
 }

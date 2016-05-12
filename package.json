@@ -4,7 +4,7 @@
   "description": "Aedes persistence, backed by redis ",
   "main": "persistence.js",
   "scripts": {
-    "test": "tape test.js | faucet"
+    "test": "standard && tape test.js | faucet"
   },
   "repository": {
     "type": "git",
