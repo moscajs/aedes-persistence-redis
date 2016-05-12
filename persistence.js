@@ -10,6 +10,7 @@ var Packet = CachedPersistence.Packet
 var inherits = require('util').inherits
 var Qlobber = require('qlobber').Qlobber
 var nextTick = require('process-nextick-args')
+var MatchStream = require('./lib/match')
 var qlobberOpts = {
   separator: '/',
   wildcard_one: '+',
@@ -89,9 +90,10 @@ function splitArray (keys, enc, cb) {
 }
 
 RedisPersistence.prototype.createRetainedStream = function (pattern) {
-  return this._db.scanStream({
-    match: 'retained:' + pattern.split(/[#+]/)[0] + '*',
-    count: 100
+  return new MatchStream({
+    objectMode: true,
+    redis: this._db,
+    match: 'retained:' + pattern.split(/[#+]/)[0] + '*'
   }).pipe(checkAndSplit('retained:', pattern))
     .pipe(throughv.obj(this._decodeAndAugment))
 }
@@ -276,7 +278,9 @@ RedisPersistence.prototype._setup = function () {
   var that = this
   var prefix = 'sub:client:'
 
-  var scanStream = this._db.scanStream({
+  var matchStream = new MatchStream({
+    objectMode: true,
+    redis: this._db,
     match: prefix + '*',
     count: 100
   })
@@ -293,7 +297,7 @@ RedisPersistence.prototype._setup = function () {
     Object.keys(all).forEach(insert, all)
   })
 
-  pump(scanStream, splitStream, hgetallStream, function (err) {
+  pump(matchStream, splitStream, hgetallStream, function (err) {
     if (that._destroyed) {
       return
     }
@@ -386,7 +390,9 @@ function split (keys, enc, cb) {
 }
 
 RedisPersistence.prototype.outgoingStream = function (client) {
-  return this._db.scanStream({
+  return new MatchStream({
+    objectMode: true,
+    redis: this._db,
     match: 'outgoing:' + client.id + ':*',
     count: 16
   }).pipe(through.obj(split))
@@ -457,7 +463,9 @@ RedisPersistence.prototype.delWill = function (client, cb) {
 }
 
 RedisPersistence.prototype.streamWill = function (brokers) {
-  return this._db.scanStream({
+  return new MatchStream({
+    objectMode: true,
+    redis: this._db,
     match: 'will:*',
     count: 100
   })
