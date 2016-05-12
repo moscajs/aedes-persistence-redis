@@ -10,7 +10,7 @@ var Packet = CachedPersistence.Packet
 var inherits = require('util').inherits
 var Qlobber = require('qlobber').Qlobber
 var nextTick = require('process-nextick-args')
-var MatchStream = require('./match_stream')
+var MatchStream = require('./match')
 var qlobberOpts = {
   separator: '/',
   wildcard_one: '+',
