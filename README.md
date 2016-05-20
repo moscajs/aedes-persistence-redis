@@ -21,6 +21,18 @@ which is used internally to connect to Redis.
 
 This constructor creates two connections to Redis.
 
+Example:
+
+```js
+aedesPersistenceRedis({
+  port: 6379,          // Redis port
+  host: '127.0.0.1',   // Redis host
+  family: 4,           // 4 (IPv4) or 6 (IPv6)
+  password: 'auth',
+  db: 0
+})
+```
+
 ## License
 
 MIT
