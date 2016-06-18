@@ -393,7 +393,7 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
     multi.del(key)
     multi.del(prekey)
     multi.exec(function (err) {
-      cb(err, client)
+      cb(err, packet)
     })
   })
 }
