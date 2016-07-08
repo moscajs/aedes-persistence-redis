@@ -384,7 +384,7 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
     }
 
     if (!buf) {
-      return cb(new Error('no such packet'))
+      return cb()
     }
 
     var packet = msgpack.decode(buf)
