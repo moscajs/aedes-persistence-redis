@@ -16,15 +16,18 @@ var qlobberOpts = {
   wildcard_one: '+',
   wildcard_some: '#'
 }
-var offlineClientsCountKey = 'counter:offline:clients'
-var offlineSubscriptionsCountKey = 'counter:offline:subscriptions'
+var offlineClientsCountKey = '{counter:offline}:clients'
+var offlineSubscriptionsCountKey = '{counter:offline}:subscriptions'
 
 function RedisPersistence (opts) {
   if (!(this instanceof RedisPersistence)) {
     return new RedisPersistence(opts)
   }
-
-  this._db = new Redis(opts)
+  if (Array.isArray(opts)) {
+    this._db = new Redis.Cluster(opts)
+  } else {
+    this._db = new Redis(opts)
+  }
   this._pipeline = null
 
   var that = this
@@ -57,7 +60,7 @@ function execPipeline (that) {
 }
 
 RedisPersistence.prototype.storeRetained = function (packet, cb) {
-  var key = 'retained:' + packet.topic
+  var key = '{retained}:' + packet.topic
   if (packet.payload.length === 0) {
     this._db.del(key, cb)
   } else {
@@ -93,8 +96,8 @@ RedisPersistence.prototype.createRetainedStream = function (pattern) {
   return new MatchStream({
     objectMode: true,
     redis: this._db,
-    match: 'retained:' + pattern.split(/[#+]/)[0] + '*'
-  }).pipe(checkAndSplit('retained:', pattern))
+    match: '{retained}:' + pattern.split(/[#+]/)[0] + '*'
+  }).pipe(checkAndSplit('{retained}:', pattern))
     .pipe(throughv.obj(this._decodeAndAugment))
 }
 
@@ -117,7 +120,7 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
 
   var multi = this._db.multi()
 
-  var clientSubKey = 'client:sub:' + client.id
+  var clientSubKey = '{client}:sub:' + client.id
   var that = this
 
   var toStore = subs.reduce(asKeyValuePair, {})
@@ -130,7 +133,7 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
 
   subs.forEach(function (sub) {
     if (sub.qos > 0) {
-      var subClientKey = 'sub:client:' + sub.topic
+      var subClientKey = 'sub:{client}:' + sub.topic
       var encoded = msgpack.encode(new Sub(client.id, sub.topic, sub.qos))
       multi.hset(subClientKey, client.id, encoded)
       count++
@@ -169,7 +172,7 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
     return
   }
 
-  var clientSubKey = 'client:sub:' + client.id
+  var clientSubKey = '{client}:sub:' + client.id
 
   var that = this
   var multi = this._db.multi()
@@ -179,7 +182,7 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
   var errored = false
 
   subs.reduce(function (multi, topic) {
-    var subClientKey = 'sub:client:' + topic
+    var subClientKey = 'sub:{client}:' + topic
     multi.hdel(subClientKey, client.id)
     that._waitFor(client, topic, finish)
     count++
@@ -221,7 +224,7 @@ function toSub (topic) {
 RedisPersistence.prototype.subscriptionsByClient = function (client, cb) {
   var pipeline = this._getPipeline()
 
-  var clientSubKey = 'client:sub:' + client.id
+  var clientSubKey = '{client}:sub:' + client.id
 
   pipeline.hgetall(clientSubKey, function (err, subs) {
     var toReturn = Object.keys(subs).map(function (sub) {
@@ -281,7 +284,7 @@ RedisPersistence.prototype._setup = function () {
   }
 
   var that = this
-  var prefix = 'sub:client:'
+  var prefix = 'sub:{client}:'
 
   var matchStream = new MatchStream({
     objectMode: true,
@@ -321,13 +324,13 @@ RedisPersistence.prototype._setup = function () {
 }
 
 RedisPersistence.prototype.outgoingEnqueue = function (sub, packet, cb) {
-  var key = 'outgoing:' + sub.clientId + ':' + packet.brokerId + ':' + packet.brokerCounter
+  var key = '{outgoing}:' + sub.clientId + ':' + packet.brokerId + ':' + packet.brokerCounter
   this._getPipeline().set(key, msgpack.encode(new Packet(packet)), cb)
 }
 
 function updateWithClientData (that, client, packet, cb) {
-  var prekey = 'outgoing:' + client.id + ':' + packet.brokerId + ':' + packet.brokerCounter
-  var postkey = 'outgoing-id:' + client.id + ':' + packet.messageId
+  var prekey = '{outgoing}:' + client.id + ':' + packet.brokerId + ':' + packet.brokerCounter
+  var postkey = '{outgoing}-id:' + client.id + ':' + packet.messageId
 
   var multi = that._db.multi()
   multi.set(postkey, msgpack.encode(packet))
@@ -345,7 +348,7 @@ function updateWithClientData (that, client, packet, cb) {
 }
 
 function augmentWithBrokerData (that, client, packet, cb) {
-  var postkey = 'outgoing-id:' + client.id + ':' + packet.messageId
+  var postkey = '{outgoing}-id:' + client.id + ':' + packet.messageId
   that._getPipeline().getBuffer(postkey, function (err, buf) {
     if (err) {
       return cb(err)
@@ -377,7 +380,7 @@ RedisPersistence.prototype.outgoingUpdate = function (client, packet, cb) {
 
 RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb) {
   var that = this
-  var key = 'outgoing-id:' + client.id + ':' + packet.messageId
+  var key = '{outgoing}-id:' + client.id + ':' + packet.messageId
   this._getPipeline().getBuffer(key, function (err, buf) {
     if (err) {
       return cb(err)
@@ -388,7 +391,7 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
     }
 
     var packet = msgpack.decode(buf)
-    var prekey = 'outgoing:' + client.id + ':' + packet.brokerId + ':' + packet.brokerCounter
+    var prekey = '{outgoing}:' + client.id + ':' + packet.brokerId + ':' + packet.brokerCounter
     var multi = that._db.multi()
     multi.del(key)
     multi.del(prekey)
@@ -409,21 +412,21 @@ RedisPersistence.prototype.outgoingStream = function (client) {
   return new MatchStream({
     objectMode: true,
     redis: this._db,
-    match: 'outgoing:' + client.id + ':*',
+    match: '{outgoing}:' + client.id + ':*',
     count: 16
   }).pipe(through.obj(split))
     .pipe(throughv.obj(this._decodeAndAugment))
 }
 
 RedisPersistence.prototype.incomingStorePacket = function (client, packet, cb) {
-  var key = 'incoming:' + client.id + ':' + packet.messageId
+  var key = '{incoming}:' + client.id + ':' + packet.messageId
   var newp = new Packet(packet)
   newp.messageId = packet.messageId
   this._getPipeline().set(key, msgpack.encode(newp), cb)
 }
 
 RedisPersistence.prototype.incomingGetPacket = function (client, packet, cb) {
-  var key = 'incoming:' + client.id + ':' + packet.messageId
+  var key = '{incoming}:' + client.id + ':' + packet.messageId
   this._getPipeline().getBuffer(key, function (err, buf) {
     if (err) {
       return cb(err)
@@ -438,12 +441,12 @@ RedisPersistence.prototype.incomingGetPacket = function (client, packet, cb) {
 }
 
 RedisPersistence.prototype.incomingDelPacket = function (client, packet, cb) {
-  var key = 'incoming:' + client.id + ':' + packet.messageId
+  var key = '{incoming}:' + client.id + ':' + packet.messageId
   this._getPipeline().del(key, cb)
 }
 
 RedisPersistence.prototype.putWill = function (client, packet, cb) {
-  var key = 'will:' + this.broker.id + ':' + client.id
+  var key = '{will}:' + this.broker.id + ':' + client.id
   packet.clientId = client.id
   packet.brokerId = this.broker.id
   this._getPipeline().setBuffer(key, msgpack.encode(packet), function (err) {
@@ -452,7 +455,7 @@ RedisPersistence.prototype.putWill = function (client, packet, cb) {
 }
 
 RedisPersistence.prototype.getWill = function (client, cb) {
-  var key = 'will:' + this.broker.id + ':' + client.id
+  var key = '{will}:' + this.broker.id + ':' + client.id
   this._getPipeline().getBuffer(key, function (err, packet) {
     if (err) { return cb(err) }
 
@@ -467,7 +470,7 @@ RedisPersistence.prototype.getWill = function (client, cb) {
 }
 
 RedisPersistence.prototype.delWill = function (client, cb) {
-  var key = 'will:' + this.broker.id + ':' + client.id
+  var key = '{will}:' + this.broker.id + ':' + client.id
   var result = null
   var pipeline = this._getPipeline()
 
@@ -488,7 +491,7 @@ RedisPersistence.prototype.streamWill = function (brokers) {
   return new MatchStream({
     objectMode: true,
     redis: this._db,
-    match: 'will:*',
+    match: '{will}:*',
     count: 100
   })
   .pipe(through.obj(function (chunk, enc, cb) {
