@@ -502,6 +502,27 @@ RedisPersistence.prototype.streamWill = function (brokers) {
   .pipe(throughv.obj(this._decodeAndAugment))
 }
 
+RedisPersistence.prototype.getClientList = function (topic) {
+  var that = this
+
+  return new MatchStream({
+    objectMode: true,
+    redis: this._db,
+    match: 'sub:client:' + topic
+  })
+  .pipe(through.obj(function hgetall (chunk, enc, cb) {
+    var pipeline = that._getPipeline()
+    pipeline.hgetall(chunk[0], cb)
+  }))
+  .pipe(through.obj(function decode (chunk, enc, done) {
+    var clients = Object.keys(chunk)
+    for (var i = 0; i < clients.length; i++) {
+      this.push(clients[i])
+    }
+    done()
+  }))
+}
+
 RedisPersistence.prototype.destroy = function (cb) {
   var that = this
   CachedPersistence.prototype.destroy.call(this, function () {
