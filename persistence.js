@@ -510,11 +510,11 @@ RedisPersistence.prototype.getClientList = function (topic) {
     redis: this._db,
     match: 'sub:client:' + topic
   })
-  .pipe(through.obj(function hgetall (chunk, enc, cb) {
+  .pipe(through.obj(function getStream (chunk, enc, cb) {
     var pipeline = that._getPipeline()
     pipeline.hgetall(chunk[0], cb)
   }))
-  .pipe(through.obj(function decode (chunk, enc, done) {
+  .pipe(through.obj(function pushClientList (chunk, enc, done) {
     var clients = Object.keys(chunk)
     for (var i = 0; i < clients.length; i++) {
       this.push(clients[i])
