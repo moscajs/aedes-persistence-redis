@@ -28,20 +28,17 @@
     "mqemitter": "^2.0.0",
     "mqemitter-redis": "^2.0.0",
     "pre-commit": "^1.1.2",
-    "standard": "^7.0.0",
+    "standard": "^8.0.0",
     "tape": "^4.2.2"
   },
   "dependencies": {
     "aedes-cached-persistence": "^2.0.0",
-    "ioredis": "^1.12.2",
+    "ioredis": "^2.3.0",
     "msgpack-lite": "^0.1.20",
     "process-nextick-args": "^1.0.6",
     "pump": "^1.0.1",
     "qlobber": "^0.7.0",
     "through2": "^2.0.0",
     "throughv": "^1.0.3"
-  },
-  "optionalDependencies": {
-    "hiredis": "^0.4.1"
   }
 }
