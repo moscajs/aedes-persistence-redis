@@ -98,11 +98,6 @@ RedisPersistence.prototype.createRetainedStream = function (pattern) {
     .pipe(throughv.obj(this._decodeAndAugment))
 }
 
-// function asKeyValuePair (acc, sub) {
-//   acc[sub.topic] = sub.qos
-//   return acc
-// }
-
 function Sub (clientId, topic, qos) {
   this.clientId = clientId
   this.topic = topic
