@@ -98,10 +98,10 @@ RedisPersistence.prototype.createRetainedStream = function (pattern) {
     .pipe(throughv.obj(this._decodeAndAugment))
 }
 
-function asKeyValuePair (acc, sub) {
-  acc[sub.topic] = sub.qos
-  return acc
-}
+// function asKeyValuePair (acc, sub) {
+//   acc[sub.topic] = sub.qos
+//   return acc
+// }
 
 function Sub (clientId, topic, qos) {
   this.clientId = clientId
@@ -120,7 +120,13 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
   var clientSubKey = 'client:sub:' + client.id
   var that = this
 
-  var toStore = subs.reduce(asKeyValuePair, {})
+  var toStore = {}
+
+  for (var i = 0; i < subs.length; i++) {
+    var sub = subs[i]
+    toStore[sub.topic] = sub.qos
+  }
+
   multi.exists(clientSubKey)
   multi.hmset(clientSubKey, toStore)
 
@@ -128,7 +134,8 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
   var published = 0
   var errored = null
 
-  subs.forEach(function (sub) {
+  for (i = 0; i < subs.length; i++) {
+    sub = subs[i]
     if (sub.qos > 0) {
       var subClientKey = 'sub:client:' + sub.topic
       var encoded = msgpack.encode(new Sub(client.id, sub.topic, sub.qos))
@@ -136,7 +143,7 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
       count++
       that._waitFor(client, sub.topic, finish)
     }
-  })
+  }
 
   this._addedSubscriptions(client, subs)
 
@@ -178,13 +185,14 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
   var count = 0
   var errored = false
 
-  subs.reduce(function (multi, topic) {
+  for (var i = 0; i < subs.length; i++) {
+    var topic = subs[i]
     var subClientKey = 'sub:client:' + topic
     multi.hdel(subClientKey, client.id)
     that._waitFor(client, topic, finish)
     count++
-    return multi.hdel(clientSubKey, topic)
-  }, multi)
+    multi.hdel(clientSubKey, topic)
+  }
 
   this._removedSubscriptions(client, subs.map(toSub))
 
@@ -224,12 +232,17 @@ RedisPersistence.prototype.subscriptionsByClient = function (client, cb) {
   var clientSubKey = 'client:sub:' + client.id
 
   pipeline.hgetall(clientSubKey, function returnSubs (err, subs) {
-    var toReturn = Object.keys(subs).map(function (sub) {
-      return {
-        topic: sub,
-        qos: parseInt(this[sub])
-      }
-    }, subs)
+    var subKeys = Object.keys(subs)
+
+    var toReturn = []
+
+    for (var i = 0; i < subKeys.length; i++) {
+      toReturn.push({
+        topic: subKeys[i],
+        qos: parseInt(subs[subKeys[i]])
+      })
+    }
+
     cb(err, toReturn.length > 0 ? toReturn : null, client)
   })
 }
@@ -299,7 +312,11 @@ RedisPersistence.prototype._setup = function () {
     cb()
   })
   .on('data', function processKeys (all) {
-    Object.keys(all).forEach(insert, all)
+    var keys = Object.keys(all)
+
+    for (var i = 0; i < keys.length; i++) {
+      insert(keys[i])
+    }
   })
 
   pump(matchStream, splitStream, hgetallStream, function pumpStream (err) {
