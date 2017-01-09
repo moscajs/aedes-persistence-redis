@@ -198,11 +198,7 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
     }
 
     var skipped = 0
-    for (var i = 1; i < results.length; i += 3) {
-      if (results[i] === '0') {
-        skipped++
-      }
-    }
+    skipped = getSkipped(results, skipped)
     var pipeline = that._getPipeline()
     pipeline.decrby(offlineSubscriptionsCountKey, subs.length - skipped, finish)
   })
@@ -219,6 +215,15 @@ function toSub (topic) {
   return {
     topic: topic
   }
+}
+
+function getSkipped (results, skipped) {
+  for (var i = 1; i < results.length; i += 3) {
+    if (results[i] === '0') {
+      skipped++
+    }
+  }
+  return skipped
 }
 
 RedisPersistence.prototype.subscriptionsByClient = function (client, cb) {
@@ -316,11 +321,7 @@ RedisPersistence.prototype._setup = function () {
     cb()
   })
   .on('data', function processKeys (all) {
-    var keys = Object.keys(all)
-
-    for (var i = 0; i < keys.length; i++) {
-      insert(keys[i])
-    }
+    processKeysForClient(all, that)
   })
 
   pump(matchStream, splitStream, hgetallStream, function pumpStream (err) {
@@ -332,12 +333,20 @@ RedisPersistence.prototype._setup = function () {
       that.emit('error', err)
     }
   })
+}
 
-  function insert (key) {
-    var decoded = msgpack.decode(this[key])
-    decoded.clientId = key
+function insert (key, that) {
+  var decoded = msgpack.decode(this[key])
+  decoded.clientId = key
 
-    that._matcher.add(decoded.topic, decoded)
+  that._matcher.add(decoded.topic, decoded)
+}
+
+function processKeysForClient (all, that) {
+  var keys = Object.keys(all)
+
+  for (var i = 0; i < keys.length; i++) {
+    insert(keys[i], that)
   }
 }
 
