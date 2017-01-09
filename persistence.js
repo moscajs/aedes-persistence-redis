@@ -227,19 +227,28 @@ RedisPersistence.prototype.subscriptionsByClient = function (client, cb) {
   var clientSubKey = 'client:sub:' + client.id
 
   pipeline.hgetall(clientSubKey, function returnSubs (err, subs) {
-    var subKeys = Object.keys(subs)
-
-    var toReturn = []
-
-    for (var i = 0; i < subKeys.length; i++) {
-      toReturn.push({
-        topic: subKeys[i],
-        qos: parseInt(subs[subKeys[i]])
-      })
-    }
-
+    var toReturn = returnSubsForClient(subs)
     cb(err, toReturn.length > 0 ? toReturn : null, client)
   })
+}
+
+function returnSubsForClient (subs) {
+  var subKeys = Object.keys(subs)
+
+  var toReturn = []
+
+  if (subKeys.length === 0) {
+    return toReturn
+  }
+
+  for (var i = 0; i < subKeys.length; i++) {
+    toReturn.push({
+      topic: subKeys[i],
+      qos: parseInt(subs[subKeys[i]])
+    })
+  }
+
+  return toReturn
 }
 
 RedisPersistence.prototype.countOffline = function (cb) {
