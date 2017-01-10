@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "aedes-cached-persistence": "^2.0.0",
+    "fast-json-parse": "^1.0.2",
     "ioredis": "^2.3.0",
     "msgpack-lite": "^0.1.20",
     "process-nextick-args": "^1.0.6",
