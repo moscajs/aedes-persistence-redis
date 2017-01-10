@@ -335,18 +335,17 @@ RedisPersistence.prototype._setup = function () {
   })
 }
 
-function insert (key, that) {
-  var decoded = msgpack.decode(this[key])
-  decoded.clientId = key
-
-  that._matcher.add(decoded.topic, decoded)
-}
-
 function processKeysForClient (all, that) {
   var keys = Object.keys(all)
+  var key = ''
+  var decoded = null
 
   for (var i = 0; i < keys.length; i++) {
-    insert(keys[i], that)
+    key = keys[i]
+    decoded = msgpack.decode(that[key])
+    decoded.clientId = key
+
+    that._matcher.add(decoded.topic, decoded)
   }
 }
 
