@@ -339,10 +339,15 @@ function processKeysForClient (all, that) {
   var keys = Object.keys(all)
   var key = ''
   var decoded = null
+  var raw = null
 
   for (var i = 0; i < keys.length; i++) {
     key = keys[i]
-    decoded = msgpack.decode(that[key])
+    raw = that[key]
+    if (!raw) {
+      continue
+    }
+    decoded = msgpack.decode(raw)
     decoded.clientId = key
 
     that._matcher.add(decoded.topic, decoded)
