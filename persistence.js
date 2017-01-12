@@ -3,6 +3,9 @@
 var Redis = require('ioredis')
 var through = require('through2')
 var throughv = require('throughv')
+var fs = require('fs')
+var path = require('path')
+var lua = fs.readFileSync(path.join(__dirname, 'lib/cursor.lua'))
 var msgpack = require('msgpack-lite')
 var pump = require('pump')
 var CachedPersistence = require('aedes-cached-persistence')
@@ -25,6 +28,9 @@ function RedisPersistence (opts) {
   }
 
   this._db = new Redis(opts)
+  this._db.defineCommand('executeLua', {
+    lua: lua
+  })
   this._pipeline = null
 
   var that = this
