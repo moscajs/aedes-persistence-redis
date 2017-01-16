@@ -39,6 +39,7 @@
     "process-nextick-args": "^1.0.6",
     "pump": "^1.0.1",
     "qlobber": "^0.7.0",
+    "syncthrough": "^0.3.1",
     "through2": "^2.0.0",
     "throughv": "^1.0.3"
   }
