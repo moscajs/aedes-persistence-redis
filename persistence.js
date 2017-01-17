@@ -123,20 +123,16 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
 
   var toStore = {}
 
-  for (var i = 0; i < subs.length; i++) {
-    var sub = subs[i]
-    toStore[sub.topic] = sub.qos
-  }
-
-  multi.exists(clientSubKey)
-  multi.hmset(clientSubKey, toStore)
-
   var count = 0
   var published = 0
   var errored = null
 
-  for (i = 0; i < subs.length; i++) {
-    sub = subs[i]
+  multi.exists(clientSubKey)
+
+  for (var i = 0; i < subs.length; i++) {
+    var sub = subs[i]
+    toStore[sub.topic] = sub.qos
+
     if (sub.qos > 0) {
       var subClientKey = 'sub:client:' + sub.topic
       var encoded = msgpack.encode(new Sub(client.id, sub.topic, sub.qos))
@@ -145,6 +141,8 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
       that._waitFor(client, sub.topic, finish)
     }
   }
+
+  multi.hmset(clientSubKey, toStore)
 
   this._addedSubscriptions(client, subs)
 
@@ -271,7 +269,6 @@ RedisPersistence.prototype.countOffline = function (cb) {
     if (err) {
       return cb(err)
     }
-
     subsCount = parseInt(count)
 
     if (clientsCount >= 0) {
