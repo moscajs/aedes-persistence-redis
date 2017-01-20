@@ -65,30 +65,29 @@ function execPipeline (that) {
 }
 
 RedisPersistence.prototype.storeRetained = function (packet, cb) {
+  console.log('++++', packet)
   var key = 'retained:' + packet.topic
   if (packet.payload.length === 0) {
-    this._db.del(key, cb)
+    this._db.hdel('retained', packet.topic, cb)
   } else {
-    this._db.set(key, msgpack.encode(packet), cb)
+    this._db.hset('retained', packet.topic, msgpack.encode(packet), cb)
   }
 }
 
-function checkAndSplit (prefix, pattern) {
+function checkAndSplit (pattern) {
   var qlobber = new Qlobber(qlobberOpts)
   qlobber.add(pattern, true)
 
   var instance = syncthrough(splitArray)
 
   instance._qlobber = qlobber
-  instance._prefix = prefix
 
   return instance
 }
 
 function splitArray (keys, enc) {
-  var prefix = this._prefix.length
   for (var i = 0, l = keys.length; i < l; i++) {
-    var key = keys[i].slice(prefix)
+    var key = keys[i]
     if (this._qlobber.match(key).length > 0) {
       this.push(keys[i])
     }
@@ -96,12 +95,23 @@ function splitArray (keys, enc) {
 }
 
 RedisPersistence.prototype.createRetainedStream = function (pattern) {
+  var that = this
   return new MatchStream({
     objectMode: true,
     redis: this._db,
-    match: 'retained:' + pattern.split(retainedRegexp)[0] + '*'
-  }).pipe(checkAndSplit('retained:', pattern))
-    .pipe(throughv.obj(this._decodeAndAugment))
+    match: 'retained',
+    retained: true
+  }).pipe(checkAndSplit(pattern))
+    .pipe(through.obj(getChunk))
+    .pipe(throughv.obj(decodeRetainedPacket))
+
+  function getChunk (chunk, enc, cb) {
+      that._db.hgetBuffer('retained', chunk, cb)
+  }
+
+  function decodeRetainedPacket (chunk, enc, cb) {
+    cb(null, msgpack.decode(chunk))
+  }
 }
 
 function Sub (clientId, topic, qos) {
