@@ -22,7 +22,6 @@ var qlobberOpts = {
 }
 var offlineClientsCountKey = 'counter:offline:clients'
 var offlineSubscriptionsCountKey = 'counter:offline:subscriptions'
-var retainedRegexp = /[#+]/
 
 function RedisPersistence (opts) {
   if (!(this instanceof RedisPersistence)) {
@@ -65,8 +64,6 @@ function execPipeline (that) {
 }
 
 RedisPersistence.prototype.storeRetained = function (packet, cb) {
-  console.log('++++', packet)
-  var key = 'retained:' + packet.topic
   if (packet.payload.length === 0) {
     this._db.hdel('retained', packet.topic, cb)
   } else {
@@ -106,7 +103,7 @@ RedisPersistence.prototype.createRetainedStream = function (pattern) {
     .pipe(throughv.obj(decodeRetainedPacket))
 
   function getChunk (chunk, enc, cb) {
-      that._db.hgetBuffer('retained', chunk, cb)
+    that._db.hgetBuffer('retained', chunk, cb)
   }
 
   function decodeRetainedPacket (chunk, enc, cb) {
