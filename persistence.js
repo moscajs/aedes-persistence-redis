@@ -96,10 +96,9 @@ function splitArray (keys, enc) {
 }
 
 RedisPersistence.prototype.createRetainedStream = function (pattern) {
-  return new MatchStream({
-    objectMode: true,
-    redis: this._db,
-    match: 'retained:' + pattern.split(retainedRegexp)[0] + '*'
+  return this._db.scanStream({
+    match: 'retained:' + pattern.split(retainedRegexp)[0] + '*',
+    count: 100
   }).pipe(checkAndSplit('retained:', pattern))
     .pipe(throughv.obj(this._decodeAndAugment))
 }
