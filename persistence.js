@@ -99,7 +99,8 @@ RedisPersistence.prototype.createRetainedStream = function (pattern) {
   return new MatchStream({
     objectMode: true,
     redis: this._db,
-    match: 'retained:' + pattern.split(retainedRegexp)[0] + '*'
+    match: 'retained:' + pattern.split(retainedRegexp)[0] + '*',
+    count: 1000
   }).pipe(checkAndSplit('retained:', pattern))
     .pipe(throughv.obj(this._decodeAndAugment))
 }

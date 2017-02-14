@@ -4,7 +4,7 @@ local cursor = 0
   local matches
   local scan
   repeat
-    scan = redis.call('SCAN', cursor, 'MATCH', ARGV[1])
+    scan = redis.call('SCAN', cursor, 'MATCH', ARGV[1], 'COUNT', ARGV[2])
     cursor = tonumber(scan[1])
     matches = scan[2]
     for i, key in ipairs(matches) do
