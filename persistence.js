@@ -15,6 +15,7 @@ var inherits = require('util').inherits
 var Qlobber = require('qlobber').Qlobber
 var nextTick = require('process-nextick-args')
 var MatchStream = require('./lib/match')
+var RangeStream = require('./lib/range')
 var qlobberOpts = {
   separator: '/',
   wildcard_one: '+',
@@ -365,11 +366,13 @@ RedisPersistence.prototype.outgoingEnqueue = function (sub, packet, cb) {
 
 function updateWithClientData (that, client, packet, cb) {
   var prekey = 'outgoing:' + client.id + ':' + packet.brokerId + ':' + packet.brokerCounter
+  var listKey = 'outgoing-id:' + client.id
   var postkey = 'outgoing-id:' + client.id + ':' + packet.messageId
 
   var multi = that._db.multi()
   multi.set(postkey, msgpack.encode(packet))
   multi.set(prekey, msgpack.encode(packet))
+  multi.rpush(listKey, postkey)
 
   multi.exec(function execMulti (err, results) {
     if (err) { return cb(err, client, packet) }
@@ -415,6 +418,7 @@ RedisPersistence.prototype.outgoingUpdate = function (client, packet, cb) {
 
 RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb) {
   var that = this
+  var listKey = 'outgoing-id:' + client.id
   var key = 'outgoing-id:' + client.id + ':' + packet.messageId
   this._getPipeline().getBuffer(key, function clearMessageId (err, buf) {
     if (err) {
@@ -427,9 +431,12 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
 
     var packet = msgpack.decode(buf)
     var prekey = 'outgoing:' + client.id + ':' + packet.brokerId + ':' + packet.brokerCounter
+
     var multi = that._db.multi()
     multi.del(key)
     multi.del(prekey)
+    multi.lrem(listKey, 1, key)
+
     multi.exec(function execOps (err) {
       cb(err, packet)
     })
@@ -444,11 +451,10 @@ function split (keys, enc, cb) {
 }
 
 RedisPersistence.prototype.outgoingStream = function (client) {
-  return new MatchStream({
+  return new RangeStream({
     objectMode: true,
     redis: this._db,
-    match: 'outgoing:' + client.id + ':*',
-    count: 16
+    key: 'outgoing-id:' + client.id
   }).pipe(through.obj(split))
     .pipe(throughv.obj(this._decodeAndAugment))
 }
