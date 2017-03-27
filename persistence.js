@@ -49,6 +49,10 @@ function RedisPersistence (opts) {
     })
   }
 
+  this._getChunk = function (chunk, enc, cb) {
+    that._db.hgetBuffer(retainedKey, chunk, cb)
+  }
+
   CachedPersistence.call(this, opts)
 }
 
@@ -102,16 +106,12 @@ RedisPersistence.prototype.createRetainedStream = function (pattern) {
     redis: this._db,
     key: retainedKey
   }).pipe(checkAndSplit(pattern))
-    .pipe(through.obj(getChunk))
+    .pipe(through.obj(that._getChunk))
     .pipe(throughv.obj(decodeRetainedPacket))
+}
 
-  function getChunk (chunk, enc, cb) {
-    that._db.hgetBuffer(retainedKey, chunk, cb)
-  }
-
-  function decodeRetainedPacket (chunk, enc, cb) {
-    cb(null, msgpack.decode(chunk))
-  }
+function decodeRetainedPacket (chunk, enc, cb) {
+  cb(null, msgpack.decode(chunk))
 }
 
 function Sub (clientId, topic, qos) {
