@@ -15,6 +15,7 @@ var inherits = require('util').inherits
 var Qlobber = require('qlobber').Qlobber
 var nextTick = require('process-nextick-args')
 var MatchStream = require('./lib/match')
+var RangeStream = require('./lib/range')
 var qlobberOpts = {
   separator: '/',
   wildcard_one: '+',
@@ -359,8 +360,14 @@ function processKeysForClient (all, that) {
 }
 
 RedisPersistence.prototype.outgoingEnqueue = function (sub, packet, cb) {
-  var key = 'outgoing:' + sub.clientId + ':' + packet.brokerId + ':' + packet.brokerCounter
-  this._getPipeline().set(key, msgpack.encode(new Packet(packet)), cb)
+  var listKey = 'outgoing:' + sub.clientId
+  var key = listKey + ':' + packet.brokerId + ':' + packet.brokerCounter
+
+  var multi = this._db.multi()
+  multi.set(key, msgpack.encode(new Packet(packet)))
+  multi.rpush(listKey, key)
+
+  multi.exec(cb)
 }
 
 function updateWithClientData (that, client, packet, cb) {
@@ -415,7 +422,9 @@ RedisPersistence.prototype.outgoingUpdate = function (client, packet, cb) {
 
 RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb) {
   var that = this
+  var listKey = 'outgoing:' + client.id
   var key = 'outgoing-id:' + client.id + ':' + packet.messageId
+
   this._getPipeline().getBuffer(key, function clearMessageId (err, buf) {
     if (err) {
       return cb(err)
@@ -426,10 +435,13 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
     }
 
     var packet = msgpack.decode(buf)
-    var prekey = 'outgoing:' + client.id + ':' + packet.brokerId + ':' + packet.brokerCounter
+    var prekey = listKey + ':' + packet.brokerId + ':' + packet.brokerCounter
+
     var multi = that._db.multi()
     multi.del(key)
     multi.del(prekey)
+    multi.lrem(listKey, 1, prekey)
+
     multi.exec(function execOps (err) {
       cb(err, packet)
     })
@@ -444,11 +456,10 @@ function split (keys, enc, cb) {
 }
 
 RedisPersistence.prototype.outgoingStream = function (client) {
-  return new MatchStream({
+  return new RangeStream({
     objectMode: true,
     redis: this._db,
-    match: 'outgoing:' + client.id + ':*',
-    count: 16
+    key: 'outgoing:' + client.id
   }).pipe(through.obj(split))
     .pipe(throughv.obj(this._decodeAndAugment))
 }
