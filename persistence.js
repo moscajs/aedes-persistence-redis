@@ -23,7 +23,9 @@ var qlobberOpts = {
 }
 var offlineClientsCountKey = 'counter:offline:clients'
 var offlineSubscriptionsCountKey = 'counter:offline:subscriptions'
-var retainedRegexp = /[#+]/
+var subscriptionsKey = 'sub:client'
+var willKey = 'will'
+var retainedKey = 'retained'
 
 function RedisPersistence (opts) {
   if (!(this instanceof RedisPersistence)) {
@@ -66,30 +68,27 @@ function execPipeline (that) {
 }
 
 RedisPersistence.prototype.storeRetained = function (packet, cb) {
-  var key = 'retained:' + packet.topic
   if (packet.payload.length === 0) {
-    this._db.del(key, cb)
+    this._db.hdel(retainedKey, packet.topic, cb)
   } else {
-    this._db.set(key, msgpack.encode(packet), cb)
+    this._db.hset(retainedKey, packet.topic, msgpack.encode(packet), cb)
   }
 }
 
-function checkAndSplit (prefix, pattern) {
+function checkAndSplit (pattern) {
   var qlobber = new Qlobber(qlobberOpts)
   qlobber.add(pattern, true)
 
   var instance = syncthrough(splitArray)
 
   instance._qlobber = qlobber
-  instance._prefix = prefix
 
   return instance
 }
 
 function splitArray (keys, enc) {
-  var prefix = this._prefix.length
   for (var i = 0, l = keys.length; i < l; i++) {
-    var key = keys[i].slice(prefix)
+    var key = keys[i]
     if (this._qlobber.match(key).length > 0) {
       this.push(keys[i])
     }
@@ -97,13 +96,22 @@ function splitArray (keys, enc) {
 }
 
 RedisPersistence.prototype.createRetainedStream = function (pattern) {
+  var that = this
   return new MatchStream({
     objectMode: true,
     redis: this._db,
-    match: 'retained:' + pattern.split(retainedRegexp)[0] + '*',
-    count: 1000
-  }).pipe(checkAndSplit('retained:', pattern))
-    .pipe(throughv.obj(this._decodeAndAugment))
+    key: retainedKey
+  }).pipe(checkAndSplit(pattern))
+    .pipe(through.obj(getChunk))
+    .pipe(throughv.obj(decodeRetainedPacket))
+
+  function getChunk (chunk, enc, cb) {
+    that._db.hgetBuffer(retainedKey, chunk, cb)
+  }
+
+  function decodeRetainedPacket (chunk, enc, cb) {
+    cb(null, msgpack.decode(chunk))
+  }
 }
 
 function Sub (clientId, topic, qos) {
@@ -138,6 +146,7 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
     if (sub.qos > 0) {
       var subClientKey = 'sub:client:' + sub.topic
       var encoded = msgpack.encode(new Sub(client.id, sub.topic, sub.qos))
+      multi.rpush(subscriptionsKey, subClientKey)
       multi.hset(subClientKey, client.id, encoded)
       count++
       that._waitFor(client, sub.topic, finish)
@@ -189,6 +198,7 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
   for (var i = 0; i < subs.length; i++) {
     var topic = subs[i]
     var subClientKey = 'sub:client:' + topic
+    multi.lrem(subscriptionsKey, 1, subClientKey)
     multi.hdel(subClientKey, client.id)
     that._waitFor(client, topic, finish)
     count++
@@ -310,9 +320,10 @@ RedisPersistence.prototype._setup = function () {
   var that = this
   var prefix = 'sub:client:'
 
-  var matchStream = new MatchStream({
+  var matchStream = new RangeStream({
     objectMode: true,
     redis: this._db,
+    key: subscriptionsKey,
     match: prefix + '*',
     count: 100
   })
@@ -495,6 +506,7 @@ RedisPersistence.prototype.putWill = function (client, packet, cb) {
   var key = 'will:' + this.broker.id + ':' + client.id
   packet.clientId = client.id
   packet.brokerId = this.broker.id
+  this._getPipeline().rpush(willKey, key)
   this._getPipeline().setBuffer(key, msgpack.encode(packet), encodeBuffer)
 
   function encodeBuffer (err) {
@@ -521,7 +533,7 @@ RedisPersistence.prototype.delWill = function (client, cb) {
   var key = 'will:' + this.broker.id + ':' + client.id
   var result = null
   var pipeline = this._getPipeline()
-
+  pipeline.lrem(willKey, 1, key)
   pipeline.getBuffer(key, function getClientWill (err, packet) {
     if (err) { return cb(err) }
 
@@ -536,11 +548,10 @@ RedisPersistence.prototype.delWill = function (client, cb) {
 }
 
 RedisPersistence.prototype.streamWill = function (brokers) {
-  return new MatchStream({
+  return new RangeStream({
     objectMode: true,
     redis: this._db,
-    match: 'will:*',
-    count: 100
+    key: willKey
   })
   .pipe(through.obj(function streamWill (chunk, enc, cb) {
     for (var i = 0, l = chunk.length; i < l; i++) {
@@ -556,9 +567,10 @@ RedisPersistence.prototype.streamWill = function (brokers) {
 RedisPersistence.prototype.getClientList = function (topic) {
   var that = this
 
-  return new MatchStream({
+  return new RangeStream({
     objectMode: true,
     redis: this._db,
+    key: subscriptionsKey,
     match: 'sub:client:' + topic
   })
   .pipe(through.obj(function getStream (chunk, enc, cb) {
