@@ -451,7 +451,7 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
     var multi = that._db.multi()
     multi.del(key)
     multi.del(prekey)
-    multi.lrem(listKey, 1, prekey)
+    multi.lrem(listKey, 0, prekey)
 
     multi.exec(function execOps (err) {
       cb(err, packet)
@@ -533,7 +533,7 @@ RedisPersistence.prototype.delWill = function (client, cb) {
   var key = 'will:' + this.broker.id + ':' + client.id
   var result = null
   var pipeline = this._getPipeline()
-  pipeline.lrem(willKey, 1, key)
+  pipeline.lrem(willKey, 0, key)
   pipeline.getBuffer(key, function getClientWill (err, packet) {
     if (err) { return cb(err) }
 
