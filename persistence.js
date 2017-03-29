@@ -3,10 +3,6 @@
 var Redis = require('ioredis')
 var through = require('through2')
 var throughv = require('throughv')
-var syncthrough = require('syncthrough')
-var fs = require('fs')
-var path = require('path')
-var lua = fs.readFileSync(path.join(__dirname, 'lib/cursor.lua'))
 var msgpack = require('msgpack-lite')
 var pump = require('pump')
 var CachedPersistence = require('aedes-cached-persistence')
@@ -14,7 +10,6 @@ var Packet = CachedPersistence.Packet
 var inherits = require('util').inherits
 var Qlobber = require('qlobber').Qlobber
 var nextTick = require('process-nextick-args')
-var MatchStream = require('./lib/match')
 var RangeStream = require('./lib/range')
 var qlobberOpts = {
   separator: '/',
@@ -33,9 +28,6 @@ function RedisPersistence (opts) {
   }
 
   this._db = new Redis(opts)
-  this._db.defineCommand('executeLua', {
-    lua: lua
-  })
   this._pipeline = null
 
   var that = this
@@ -79,35 +71,28 @@ RedisPersistence.prototype.storeRetained = function (packet, cb) {
   }
 }
 
-function checkAndSplit (pattern) {
+RedisPersistence.prototype.createRetainedStream = function (pattern) {
+  var that = this
   var qlobber = new Qlobber(qlobberOpts)
   qlobber.add(pattern, true)
 
-  var instance = syncthrough(splitArray)
+  var stream = through.obj(that._getChunk)
 
-  instance._qlobber = qlobber
-
-  return instance
-}
-
-function splitArray (keys, enc) {
-  for (var i = 0, l = keys.length; i < l; i++) {
-    var key = keys[i]
-    if (this._qlobber.match(key).length > 0) {
-      this.push(keys[i])
+  this._db.hkeys(retainedKey, function getKeys (err, keys) {
+    if (err) {
+      stream.emit('error', err)
+    } else {
+      for (var i = 0, l = keys.length; i < l; i++) {
+        if (qlobber.match(keys[i]).length > 0) {
+          stream.write(keys[i])
+        }
+      }
+      stream.end()
+      stream = null
     }
-  }
-}
+  })
 
-RedisPersistence.prototype.createRetainedStream = function (pattern) {
-  var that = this
-  return new MatchStream({
-    objectMode: true,
-    redis: this._db,
-    key: retainedKey
-  }).pipe(checkAndSplit(pattern))
-    .pipe(through.obj(that._getChunk))
-    .pipe(throughv.obj(decodeRetainedPacket))
+  return stream.pipe(throughv.obj(decodeRetainedPacket))
 }
 
 function decodeRetainedPacket (chunk, enc, cb) {
