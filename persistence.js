@@ -10,7 +10,6 @@ var Packet = CachedPersistence.Packet
 var inherits = require('util').inherits
 var Qlobber = require('qlobber').Qlobber
 var nextTick = require('process-nextick-args')
-var RangeStream = require('./lib/range')
 var qlobberOpts = {
   separator: '/',
   wildcard_one: '+',
@@ -21,6 +20,7 @@ var offlineSubscriptionsCountKey = 'counter:offline:subscriptions'
 var subscriptionsKey = 'sub:client'
 var willKey = 'will'
 var retainedKey = 'retained'
+var outgoingKey = 'outgoing:'
 
 function RedisPersistence (opts) {
   if (!(this instanceof RedisPersistence)) {
@@ -303,16 +303,9 @@ RedisPersistence.prototype._setup = function () {
   }
 
   var that = this
-  var prefix = 'sub:client:'
 
-  var matchStream = new RangeStream({
-    objectMode: true,
-    redis: this._db,
-    key: subscriptionsKey,
-    match: prefix + '*',
-    count: 100
-  })
   var splitStream = through.obj(split)
+
   var hgetallStream = throughv.obj(function getStream (chunk, enc, cb) {
     var pipeline = that._getPipeline()
     pipeline.hgetallBuffer(chunk, cb)
@@ -325,7 +318,16 @@ RedisPersistence.prototype._setup = function () {
     processKeysForClient(all, that)
   })
 
-  pump(matchStream, splitStream, hgetallStream, function pumpStream (err) {
+  this._db.lrange(subscriptionsKey, 0, 10000, function lrangeResult (err, results) {
+    if (err) {
+      splitStream.emit('error', err)
+    } else {
+      splitStream.write(results)
+      splitStream.end()
+    }
+  })
+
+  pump(splitStream, hgetallStream, function pumpStream (err) {
     if (that._destroyed) {
       return
     }
@@ -452,12 +454,20 @@ function split (keys, enc, cb) {
 }
 
 RedisPersistence.prototype.outgoingStream = function (client) {
-  return new RangeStream({
-    objectMode: true,
-    redis: this._db,
-    key: 'outgoing:' + client.id
-  }).pipe(through.obj(split))
-    .pipe(throughv.obj(this._decodeAndAugment))
+  var stream = throughv.obj(this._decodeAndAugment)
+
+  this._db.lrange(outgoingKey + client.id, 0, 10000, function lrangeResult (err, results) {
+    if (err) {
+      stream.emit('error', err)
+    } else {
+      for (var i = 0, l = results.length; i < l; i++) {
+        stream.write(results[i])
+      }
+      stream.end()
+    }
+  })
+
+  return stream
 }
 
 RedisPersistence.prototype.incomingStorePacket = function (client, packet, cb) {
@@ -533,42 +543,48 @@ RedisPersistence.prototype.delWill = function (client, cb) {
 }
 
 RedisPersistence.prototype.streamWill = function (brokers) {
-  return new RangeStream({
-    objectMode: true,
-    redis: this._db,
-    key: willKey
-  })
-  .pipe(through.obj(function streamWill (chunk, enc, cb) {
-    for (var i = 0, l = chunk.length; i < l; i++) {
-      if (!brokers || !brokers[chunk[i].split(':')[1]]) {
-        this.push(chunk[i])
+  var stream = throughv.obj(this._decodeAndAugment)
+
+  this._db.lrange(willKey, 0, 10000, streamWill)
+
+  function streamWill (err, results) {
+    if (err) {
+      stream.emit('error', err)
+    } else {
+      for (var i = 0, l = results.length; i < l; i++) {
+        if (!brokers || !brokers[results[i].split(':')[1]]) {
+          stream.write(results[i])
+        }
       }
+      stream.end()
     }
-    cb()
-  }))
-  .pipe(throughv.obj(this._decodeAndAugment))
+  }
+  return stream
 }
 
 RedisPersistence.prototype.getClientList = function (topic) {
   var that = this
+  var key = 'sub:client:' + topic
 
-  return new RangeStream({
-    objectMode: true,
-    redis: this._db,
-    key: subscriptionsKey,
-    match: 'sub:client:' + topic
-  })
-  .pipe(through.obj(function getStream (chunk, enc, cb) {
+  var stream = through.obj(getStream)
+
+  stream.write(key)
+  stream.end()
+
+  return stream.pipe(through.obj(pushClientList))
+
+  function getStream (chunk, enc, cb) {
     var pipeline = that._getPipeline()
-    pipeline.hgetall(chunk[0], cb)
-  }))
-  .pipe(through.obj(function pushClientList (chunk, enc, done) {
-    var clients = Object.keys(chunk)
-    for (var i = 0; i < clients.length; i++) {
-      this.push(clients[i])
-    }
-    done()
-  }))
+    pipeline.hgetall(chunk, cb)
+  }
+}
+
+function pushClientList (chunk, enc, done) {
+  var clients = Object.keys(chunk)
+  for (var i = 0; i < clients.length; i++) {
+    this.push(clients[i])
+  }
+  done()
 }
 
 RedisPersistence.prototype.destroy = function (cb) {
