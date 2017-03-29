@@ -92,7 +92,7 @@ RedisPersistence.prototype.createRetainedStream = function (pattern) {
     }
   })
 
-  return stream.pipe(throughv.obj(decodeRetainedPacket))
+  return pump(stream, throughv.obj(decodeRetainedPacket))
 }
 
 function decodeRetainedPacket (chunk, enc, cb) {
@@ -571,7 +571,7 @@ RedisPersistence.prototype.getClientList = function (topic) {
   stream.write(key)
   stream.end()
 
-  return stream.pipe(through.obj(pushClientList))
+  return pump(stream, through.obj(pushClientList))
 
   function getStream (chunk, enc, cb) {
     var pipeline = that._getPipeline()
