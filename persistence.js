@@ -82,17 +82,20 @@ RedisPersistence.prototype.createRetainedStream = function (pattern) {
     if (err) {
       stream.emit('error', err)
     } else {
-      for (var i = 0, l = keys.length; i < l; i++) {
-        if (qlobber.match(keys[i]).length > 0) {
-          stream.write(keys[i])
-        }
-      }
-      stream.end()
-      stream = null
+      matchRetained(stream, keys, qlobber)
     }
   })
 
   return pump(stream, throughv.obj(decodeRetainedPacket))
+}
+
+function matchRetained (stream, keys, qlobber) {
+  for (var i = 0, l = keys.length; i < l; i++) {
+    if (qlobber.match(keys[i]).length > 0) {
+      stream.write(keys[i])
+    }
+  }
+  stream.end()
 }
 
 function decodeRetainedPacket (chunk, enc, cb) {
@@ -566,17 +569,19 @@ RedisPersistence.prototype.getClientList = function (topic) {
   var that = this
   var key = 'sub:client:' + topic
 
-  var stream = through.obj(getStream)
+  var stream = through.obj(pushClientList)
 
-  stream.write(key)
-  stream.end()
+  var pipeline = that._getPipeline()
+  pipeline.hgetall(key, function handleClients (err, results) {
+    if (err) {
+      stream.emit('error', err)
+    } else {
+      stream.write(results)
+      stream.end()
+    }
+  })
 
-  return pump(stream, through.obj(pushClientList))
-
-  function getStream (chunk, enc, cb) {
-    var pipeline = that._getPipeline()
-    pipeline.hgetall(chunk, cb)
-  }
+  return stream
 }
 
 function pushClientList (chunk, enc, done) {
