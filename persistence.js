@@ -507,7 +507,7 @@ RedisPersistence.prototype.getWill = function (client, cb) {
 }
 
 RedisPersistence.prototype.delWill = function (client, cb) {
-  var key = 'will:' + this.broker.id + ':' + client.id
+  var key = 'will:' + client.brokerId + ':' + client.id
   var result = null
   var pipeline = this._getPipeline()
 
