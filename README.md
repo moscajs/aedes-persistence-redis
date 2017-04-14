@@ -33,6 +33,8 @@ aedesPersistenceRedis({
 })
 ```
 
+### v3
+
 ## License
 
 MIT
