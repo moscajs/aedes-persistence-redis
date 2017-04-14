@@ -33,6 +33,16 @@ aedesPersistenceRedis({
 })
 ```
 
+### Updates in v3.x
+v2 used scan stream with Lua which would slow down the connections. Also it would lead to high CPU usage on the Redis server because most of the processing happened on the Redis server. v3 follows the
+Mosca's approach of keeping maps of keys and then accessing them rather than doing any sort of scanning with wildcards.
+
+Changes made :-
+- `retained` key is a Redis Hashmap of all retained keys.
+- `sub:client` key is a Redis list of all subscription keys
+- `will` key is a Redis list for all will keys
+- `outgoing: + clientId` key will contain keys for all outgoing messages
+
 ## License
 
 MIT
