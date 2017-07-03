@@ -275,11 +275,11 @@ RedisPersistence.prototype._setup = function () {
   }
 
   var that = this
-  var pipeline = that._getPipeline()
 
   var splitStream = through.obj(split)
 
   var hgetallStream = throughv.obj(function getStream (clientId, enc, cb) {
+    var pipeline = that._getPipeline()
     var clientSubKey = clientKey + clientId
     pipeline.hgetall(clientSubKey, function clientHash (err, hash) {
       cb(err, {clientHash: hash, clientId: clientId})
