@@ -105,12 +105,6 @@ function decodeRetainedPacket (chunk, enc, cb) {
   cb(null, msgpack.decode(chunk))
 }
 
-// function Sub (clientId, topic, qos) {
-//   this.clientId = clientId
-//   this.topic = topic
-//   this.qos = qos
-// }
-
 RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
   if (!this.ready) {
     this.once('ready', this.addSubscriptions.bind(this, client, subs, cb))
