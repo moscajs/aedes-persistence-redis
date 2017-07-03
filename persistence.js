@@ -166,7 +166,7 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
     count++
   }
 
-  pipeline.srem(subsKey, subs)
+  pipeline.srem(subsKey, subs) // TODO matcher.match should be checked
 
   pipeline.hdel(clientSubKey, subs)
 
@@ -275,12 +275,13 @@ RedisPersistence.prototype._setup = function () {
   }
 
   var that = this
+  var pipeline = that._getPipeline()
 
   var splitStream = through.obj(split)
 
   var hgetallStream = throughv.obj(function getStream (clientId, enc, cb) {
-    var pipeline = that._getPipeline()
-    pipeline.hgetall(clientId, function clientHash (err, hash) {
+    var clientSubKey = clientKey + clientId
+    pipeline.hgetall(clientSubKey, function clientHash (err, hash) {
       cb(err, {clientHash: hash, clientId: clientId})
     })
   }, function emitReady (cb) {
