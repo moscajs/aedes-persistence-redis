@@ -23,6 +23,8 @@ var willKey = 'will'
 var retainedKey = 'retained'
 var outgoingKey = 'outgoing:'
 
+var noop = function () {}
+
 function RedisPersistence (opts) {
   if (!(this instanceof RedisPersistence)) {
     return new RedisPersistence(opts)
@@ -68,9 +70,9 @@ function execPipeline (that) {
 
 RedisPersistence.prototype.storeRetained = function (packet, cb) {
   if (packet.payload.length === 0) {
-    this._getPipeline().hdel(retainedKey, packet.topic, cb)
+    this._db.hdel(retainedKey, packet.topic, cb)
   } else {
-    this._getPipeline().hset(retainedKey, packet.topic, msgpack.encode(packet), cb)
+    this._db.hset(retainedKey, packet.topic, msgpack.encode(packet), cb)
   }
 }
 
@@ -81,7 +83,7 @@ RedisPersistence.prototype.createRetainedStream = function (pattern) {
 
   var stream = through.obj(that._getChunk)
 
-  this._getPipeline().hkeys(retainedKey, function getKeys (err, keys) {
+  this._db.hkeys(retainedKey, function getKeys (err, keys) {
     if (err) {
       stream.emit('error', err)
     } else {
@@ -111,10 +113,7 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
     return
   }
 
-  var pipeline = this._getPipeline()
-
   var clientSubKey = clientKey + client.id
-  var that = this
 
   var toStore = {}
   var offlines = []
@@ -129,13 +128,13 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
       offlines.push(sub.topic)
       count++
       // TODO don't wait the client an extra tick
-      that._waitFor(client, sub.topic, finish)
+      this._waitFor(client, sub.topic, finish)
     }
   }
 
-  pipeline.sadd(subsKey, offlines)
-  pipeline.sadd(clientsKey, client.id)
-  pipeline.hmset(clientSubKey, toStore, finish)
+  this._db.sadd(subsKey, offlines, noop)
+  this._db.sadd(clientsKey, client.id, noop)
+  this._db.hmset(clientSubKey, toStore, finish)
 
   this._addedSubscriptions(client, subs)
 
@@ -155,30 +154,29 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
 
   var clientSubKey = clientKey + client.id
 
-  var that = this
-  var pipeline = this._getPipeline()
   var published = 0
   var count = 0
   var errored = false
 
   for (var i = 0; i < subs.length; i++) {
-    that._waitFor(client, subs[i], finish)
+    this._waitFor(client, subs[i], finish)
     count++
   }
 
-  pipeline.srem(subsKey, subs) // TODO matcher.match should be checked
+  this._db.srem(subsKey, subs) // TODO matcher.match should be checked
 
-  pipeline.hdel(clientSubKey, subs)
+  this._db.hdel(clientSubKey, subs)
 
   this._removedSubscriptions(client, subs.map(toSub))
 
-  pipeline.exists(clientSubKey, function checkAllSubsRemoved (err, subCount) {
+  var that = this
+  this._db.exists(clientSubKey, function checkAllSubsRemoved (err, subCount) {
     if (err) {
       errored = true
       return cb(err)
     }
     if (subCount === 0) {
-      pipeline.srem(clientsKey, client.id)
+      that._db.srem(clientsKey, client.id)
     }
   })
 
@@ -199,11 +197,9 @@ function toSub (topic) {
 }
 
 RedisPersistence.prototype.subscriptionsByClient = function (client, cb) {
-  var pipeline = this._getPipeline()
-
   var clientSubKey = clientKey + client.id
 
-  pipeline.hgetall(clientSubKey, function returnSubs (err, subs) {
+  this._db.hgetall(clientSubKey, function returnSubs (err, subs) {
     var toReturn = returnSubsForClient(subs)
     cb(err, toReturn.length > 0 ? toReturn : null, client)
   })
@@ -229,11 +225,10 @@ function returnSubsForClient (subs) {
 }
 
 RedisPersistence.prototype.countOffline = function (cb) {
-  var pipeline = this._getPipeline()
   var clientsCount = -1
   var subsCount = -1
 
-  pipeline.scard(clientsKey, function countOfflineClients (err, count) {
+  this._db.scard(clientsKey, function countOfflineClients (err, count) {
     if (err) {
       return cb(err)
     }
@@ -245,7 +240,7 @@ RedisPersistence.prototype.countOffline = function (cb) {
     }
   })
 
-  pipeline.scard(subsKey, function countSubscriptions (err, count) {
+  this._db.scard(subsKey, function countSubscriptions (err, count) {
     if (err) {
       return cb(err)
     }
@@ -279,9 +274,8 @@ RedisPersistence.prototype._setup = function () {
   var splitStream = through.obj(split)
 
   var hgetallStream = throughv.obj(function getStream (clientId, enc, cb) {
-    var pipeline = that._getPipeline()
     var clientSubKey = clientKey + clientId
-    pipeline.hgetall(clientSubKey, function clientHash (err, hash) {
+    that._db.hgetall(clientSubKey, function clientHash (err, hash) {
       cb(err, {clientHash: hash, clientId: clientId})
     })
   }, function emitReady (cb) {
@@ -329,9 +323,8 @@ RedisPersistence.prototype.outgoingEnqueue = function (sub, packet, cb) {
   var listKey = 'outgoing:' + sub.clientId
   var key = listKey + ':' + packet.brokerId + ':' + packet.brokerCounter
 
-  var pipeline = this._getPipeline()
-  pipeline.rpush(listKey, key)
-  pipeline.set(key, msgpack.encode(new Packet(packet)), cb)
+  this._db.rpush(listKey, key)
+  this._db.set(key, msgpack.encode(new Packet(packet)), cb)
 }
 
 function updateWithClientData (that, client, packet, cb) {
@@ -339,9 +332,8 @@ function updateWithClientData (that, client, packet, cb) {
   var postkey = 'outgoing-id:' + client.id + ':' + packet.messageId
   var encoded = msgpack.encode(packet)
 
-  var pipeline = that._getPipeline()
-  pipeline.set(prekey, encoded)
-  pipeline.set(postkey, encoded, function setPostKey (err, result) {
+  that._db.set(prekey, encoded)
+  that._db.set(postkey, encoded, function setPostKey (err, result) {
     if (err) { return cb(err, client, packet) }
 
     if (result !== 'OK') {
@@ -354,7 +346,7 @@ function updateWithClientData (that, client, packet, cb) {
 
 function augmentWithBrokerData (that, client, packet, cb) {
   var postkey = 'outgoing-id:' + client.id + ':' + packet.messageId
-  that._getPipeline().getBuffer(postkey, function augmentBrokerData (err, buf) {
+  that._db.getBuffer(postkey, function augmentBrokerData (err, buf) {
     if (err) {
       return cb(err)
     }
@@ -388,7 +380,7 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
   var listKey = 'outgoing:' + client.id
   var key = 'outgoing-id:' + client.id + ':' + packet.messageId
 
-  this._getPipeline().getBuffer(key, function clearMessageId (err, buf) {
+  this._db.getBuffer(key, function clearMessageId (err, buf) {
     if (err) {
       return cb(err)
     }
@@ -400,10 +392,9 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
     var packet = msgpack.decode(buf)
     var prekey = listKey + ':' + packet.brokerId + ':' + packet.brokerCounter
 
-    var pipeline = that._getPipeline()
-    pipeline.del(key)
-    pipeline.del(prekey)
-    pipeline.lrem(listKey, 0, prekey, function lremKey (err) {
+    that._db.del(key)
+    that._db.del(prekey)
+    that._db.lrem(listKey, 0, prekey, function lremKey (err) {
       cb(err, packet)
     })
   })
@@ -437,12 +428,12 @@ RedisPersistence.prototype.incomingStorePacket = function (client, packet, cb) {
   var key = 'incoming:' + client.id + ':' + packet.messageId
   var newp = new Packet(packet)
   newp.messageId = packet.messageId
-  this._getPipeline().set(key, msgpack.encode(newp), cb)
+  this._db.set(key, msgpack.encode(newp), cb)
 }
 
 RedisPersistence.prototype.incomingGetPacket = function (client, packet, cb) {
   var key = 'incoming:' + client.id + ':' + packet.messageId
-  this._getPipeline().getBuffer(key, function decodeBuffer (err, buf) {
+  this._db.getBuffer(key, function decodeBuffer (err, buf) {
     if (err) {
       return cb(err)
     }
@@ -457,15 +448,15 @@ RedisPersistence.prototype.incomingGetPacket = function (client, packet, cb) {
 
 RedisPersistence.prototype.incomingDelPacket = function (client, packet, cb) {
   var key = 'incoming:' + client.id + ':' + packet.messageId
-  this._getPipeline().del(key, cb)
+  this._db.del(key, cb)
 }
 
 RedisPersistence.prototype.putWill = function (client, packet, cb) {
   var key = 'will:' + this.broker.id + ':' + client.id
   packet.clientId = client.id
   packet.brokerId = this.broker.id
-  this._getPipeline().rpush(willKey, key)
-  this._getPipeline().setBuffer(key, msgpack.encode(packet), encodeBuffer)
+  this._db.rpush(willKey, key)
+  this._db.setBuffer(key, msgpack.encode(packet), encodeBuffer)
 
   function encodeBuffer (err) {
     cb(err, client)
@@ -474,7 +465,7 @@ RedisPersistence.prototype.putWill = function (client, packet, cb) {
 
 RedisPersistence.prototype.getWill = function (client, cb) {
   var key = 'will:' + this.broker.id + ':' + client.id
-  this._getPipeline().getBuffer(key, function getWillForClient (err, packet) {
+  this._db.getBuffer(key, function getWillForClient (err, packet) {
     if (err) { return cb(err) }
 
     var result = null
@@ -490,9 +481,9 @@ RedisPersistence.prototype.getWill = function (client, cb) {
 RedisPersistence.prototype.delWill = function (client, cb) {
   var key = 'will:' + client.brokerId + ':' + client.id
   var result = null
-  var pipeline = this._getPipeline()
-  pipeline.lrem(willKey, 0, key)
-  pipeline.getBuffer(key, function getClientWill (err, packet) {
+  var that = this
+  this._db.lrem(willKey, 0, key)
+  this._db.getBuffer(key, function getClientWill (err, packet) {
     if (err) { return cb(err) }
 
     if (packet) {
@@ -500,7 +491,7 @@ RedisPersistence.prototype.delWill = function (client, cb) {
     }
   })
 
-  pipeline.del(key, function deleteWill (err) {
+  that._db.del(key, function deleteWill (err) {
     cb(err, result, client)
   })
 }
