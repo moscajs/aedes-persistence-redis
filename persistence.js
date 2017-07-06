@@ -76,10 +76,13 @@ RedisPersistence.prototype.storeRetained = function (packet, cb) {
   }
 }
 
-RedisPersistence.prototype.createRetainedStream = function (pattern) {
+RedisPersistence.prototype.createRetainedStreamCombi = function (patterns) {
   var that = this
   var qlobber = new Qlobber(qlobberOpts)
-  qlobber.add(pattern, true)
+
+  patterns.map(function (pattern) {
+    qlobber.add(pattern, true)
+  })
 
   var stream = through.obj(that._getChunk)
 
@@ -92,6 +95,10 @@ RedisPersistence.prototype.createRetainedStream = function (pattern) {
   })
 
   return pump(stream, throughv.obj(decodeRetainedPacket))
+}
+
+RedisPersistence.prototype.createRetainedStream = function (pattern) {
+  return this.createRetainedStreamCombi([pattern])
 }
 
 function matchRetained (stream, keys, qlobber) {
