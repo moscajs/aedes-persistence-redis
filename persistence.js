@@ -10,7 +10,6 @@ var CachedPersistence = require('aedes-cached-persistence')
 var Packet = CachedPersistence.Packet
 var inherits = require('util').inherits
 var Qlobber = require('qlobber').Qlobber
-var nextTick = require('process-nextick-args')
 var qlobberOpts = {
   separator: '/',
   wildcard_one: '+',
@@ -33,7 +32,6 @@ function RedisPersistence (opts) {
   opts = opts || {}
   this.maxSessionDelivery = opts.maxSessionDelivery || 1000
   this._db = new Redis(opts)
-  this._pipeline = null
 
   var that = this
   this._decodeAndAugment = function decodeAndAugment (chunk, enc, cb) {
@@ -55,19 +53,6 @@ function RedisPersistence (opts) {
 
 inherits(RedisPersistence, CachedPersistence)
 
-RedisPersistence.prototype._getPipeline = function () {
-  if (!this._pipeline) {
-    this._pipeline = this._db.pipeline()
-    nextTick(execPipeline, this)
-  }
-  return this._pipeline
-}
-
-function execPipeline (that) {
-  that._pipeline.exec()
-  that._pipeline = null
-}
-
 RedisPersistence.prototype.storeRetained = function (packet, cb) {
   if (packet.payload.length === 0) {
     this._db.hdel(retainedKey, packet.topic, cb)
@@ -80,9 +65,9 @@ RedisPersistence.prototype.createRetainedStreamCombi = function (patterns) {
   var that = this
   var qlobber = new Qlobber(qlobberOpts)
 
-  patterns.map(function (pattern) {
-    qlobber.add(pattern, true)
-  })
+  for (var i = 0; i < patterns.length; i++) {
+    qlobber.add(patterns[i], true)
+  }
 
   var stream = through.obj(that._getChunk)
 
@@ -163,31 +148,42 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
 
   var published = 0
   var count = 0
+  var removableTopics = []
   var errored = false
 
   for (var i = 0; i < subs.length; i++) {
     this._waitFor(client, subs[i], finish)
+    if (this._matcher.match(subs[i]).length === 1) {
+      removableTopics.push(subs[i])
+    }
     count++
   }
 
-  this._db.srem(subsKey, subs) // TODO matcher.match should be checked
-
-  this._db.hdel(clientSubKey, subs)
-
-  this._removedSubscriptions(client, subs.map(toSub))
-
   var that = this
-  this._db.exists(clientSubKey, function checkAllSubsRemoved (err, subCount) {
+  this._db.hdel(clientSubKey, subs, function subKeysRemoved (err) {
     if (err) {
       errored = true
       return cb(err)
     }
-    if (subCount === 0) {
-      that._db.srem(clientsKey, client.id)
-    }
-  })
 
-  finish()
+    if (removableTopics.length > 0) {
+      that._db.srem(subsKey, removableTopics)
+    }
+
+    that._db.exists(clientSubKey, function checkAllSubsRemoved (err, subCount) {
+      if (err) {
+        errored = true
+        return cb(err)
+      }
+      if (subCount === 0) {
+        that._db.srem(clientsKey, client.id)
+      }
+    })
+
+    that._removedSubscriptions(client, subs.map(toSub))
+
+    finish()
+  })
 
   function finish () {
     published++
@@ -278,8 +274,6 @@ RedisPersistence.prototype._setup = function () {
 
   var that = this
 
-  var splitStream = through.obj(split)
-
   var hgetallStream = throughv.obj(function getStream (clientId, enc, cb) {
     var clientSubKey = clientKey + clientId
     that._db.hgetall(clientSubKey, function clientHash (err, hash) {
@@ -296,20 +290,12 @@ RedisPersistence.prototype._setup = function () {
 
   this._db.smembers(clientsKey, function smembers (err, clientIds) {
     if (err) {
-      splitStream.emit('error', err)
+      hgetallStream.emit('error', err)
     } else {
-      splitStream.write(clientIds)
-      splitStream.end()
-    }
-  })
-
-  pump(splitStream, hgetallStream, function pumpStream (err) {
-    if (that._destroyed) {
-      return
-    }
-
-    if (err) {
-      that.emit('error', err)
+      for (var i = 0, l = clientIds.length; i < l; i++) {
+        hgetallStream.write(clientIds[i])
+      }
+      hgetallStream.end()
     }
   })
 }
@@ -405,13 +391,6 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
       cb(err, packet)
     })
   })
-}
-
-function split (keys, enc, cb) {
-  for (var i = 0, l = keys.length; i < l; i++) {
-    this.push(keys[i])
-  }
-  cb()
 }
 
 RedisPersistence.prototype.outgoingStream = function (client) {
