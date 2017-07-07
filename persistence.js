@@ -119,7 +119,6 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
     if (sub.qos > 0) {
       offlines.push(sub.topic)
       count++
-      // TODO don't wait the client an extra tick
       this._waitFor(client, sub.topic, finish)
     }
   }
