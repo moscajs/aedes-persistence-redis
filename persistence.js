@@ -474,10 +474,10 @@ RedisPersistence.prototype.delWill = function (client, cb) {
     if (packet) {
       result = msgpack.decode(packet)
     }
-  })
 
-  that._db.del(key, function deleteWill (err) {
-    cb(err, result, client)
+    that._db.del(key, function deleteWill (err) {
+      cb(err, result, client)
+    })
   })
 }
 
