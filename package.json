@@ -32,10 +32,10 @@
     "tape": "^4.2.2"
   },
   "dependencies": {
-    "aedes-cached-persistence": "^3.0.0",
+    "aedes-cached-persistence": "^4.0.0",
+    "from2": "^2.3.0",
     "ioredis": "^3.0.0",
     "msgpack-lite": "^0.1.20",
-    "process-nextick-args": "^1.0.6",
     "pump": "^1.0.1",
     "qlobber": "^0.7.0",
     "through2": "^2.0.0",
