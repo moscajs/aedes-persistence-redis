@@ -25,11 +25,11 @@
   "devDependencies": {
     "concat-stream": "^1.5.1",
     "faucet": "0.0.1",
-    "mqemitter": "^2.0.0",
-    "mqemitter-redis": "^2.0.0",
+    "mqemitter": "^2.1.0",
+    "mqemitter-redis": "^2.2.0",
     "pre-commit": "^1.1.2",
-    "standard": "^8.0.0",
-    "tape": "^4.2.2"
+    "standard": "^10.0.0",
+    "tape": "^4.7.0"
   },
   "dependencies": {
     "aedes-cached-persistence": "^4.0.0",
@@ -37,7 +37,7 @@
     "ioredis": "^3.0.0",
     "msgpack-lite": "^0.1.20",
     "pump": "^1.0.1",
-    "qlobber": "^0.7.0",
+    "qlobber": "^0.8.0",
     "through2": "^2.0.0",
     "throughv": "^1.0.3"
   }

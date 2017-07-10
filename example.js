@@ -7,4 +7,3 @@ var aedes = require('aedes')({
 var server = require('net').createServer(aedes.handle)
 
 server.listen(1883)
-
