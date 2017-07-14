@@ -124,8 +124,7 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
   this._db.sadd(clientsKey, client.id, noop)
   this._db.hmset(clientSubKey, toStore, finish)
 
-  this._waitFor(client, finish)
-  this._addedSubscriptions(client, subs)
+  this._addedSubscriptions(client, subs, finish)
 
   function finish (err) {
     errored = err
@@ -174,13 +173,11 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
       }
     })
 
-    that._waitFor(client, function () {
+    that._removedSubscriptions(client, subs.map(toSub), function () {
       if (!errored) {
         cb(null, client)
       }
     })
-
-    that._removedSubscriptions(client, subs.map(toSub))
   })
 }
 
