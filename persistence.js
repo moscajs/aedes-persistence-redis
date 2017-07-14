@@ -109,17 +109,14 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
 
   var toStore = {}
   var offlines = []
-  var count = 0
   var published = 0
-  var errored = null
+  var errored
 
   for (var i = 0; i < subs.length; i++) {
     var sub = subs[i]
     toStore[sub.topic] = sub.qos
     if (sub.qos > 0) {
       offlines.push(sub.topic)
-      count++
-      this._waitFor(client, sub.topic, finish)
     }
   }
 
@@ -127,12 +124,13 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
   this._db.sadd(clientsKey, client.id, noop)
   this._db.hmset(clientSubKey, toStore, finish)
 
-  this._addedSubscriptions(client, subs)
+  this._addedSubscriptions(client, subs, finish)
 
-  function finish () {
+  function finish (err) {
+    errored = err
     published++
-    if (published === count + 1 && !errored) {
-      cb(null, client)
+    if (published === 2) {
+      cb(errored, client)
     }
   }
 }
@@ -145,17 +143,13 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
 
   var clientSubKey = clientKey + client.id
 
-  var published = 0
-  var count = 0
   var removableTopics = []
   var errored = false
 
   for (var i = 0; i < subs.length; i++) {
-    this._waitFor(client, subs[i], finish)
     if (this._matcher.match(subs[i]).length === 1) {
       removableTopics.push(subs[i])
     }
-    count++
   }
 
   var that = this
@@ -179,17 +173,12 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
       }
     })
 
-    that._removedSubscriptions(client, subs.map(toSub))
-
-    finish()
+    that._removedSubscriptions(client, subs.map(toSub), function () {
+      if (!errored) {
+        cb(null, client)
+      }
+    })
   })
-
-  function finish () {
-    published++
-    if (published === count + 1 && !errored) {
-      cb(null, client)
-    }
-  }
 }
 
 function toSub (topic) {
