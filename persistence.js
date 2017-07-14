@@ -174,13 +174,14 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
       }
     })
 
-    that._waitFor(client, finish)
+    that._waitFor(client, function () {
+      if (!errored) {
+        cb(null, client)
+      }
+    })
+
     that._removedSubscriptions(client, subs.map(toSub))
   })
-
-  function finish () {
-    cb(null, client)
-  }
 }
 
 function toSub (topic) {
