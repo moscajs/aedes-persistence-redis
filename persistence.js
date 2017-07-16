@@ -394,9 +394,19 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
 
   var mainKey = this.msgMap[key]
   this.msgMap[key] = null
-  that._db.del(mainKey)
-  that._db.lrem(listKey, 0, mainKey, function lremKey (err) {
-    cb(err, packet)
+
+  if (!mainKey) {
+    return cb(null, packet)
+  }
+
+  this._db.getBuffer(mainKey, function clearMessageId (err, buf) {
+    var origPacket = msgpack.decode(buf)
+    origPacket.messageId = packet.messageId
+    that._db.del(mainKey)
+    that._db.lrem(listKey, 0, mainKey)
+    setTimeout(function () {
+      cb(err, origPacket)
+    }, 150)
   })
 
   // this._db.getBuffer(key, function clearMessageId (err, buf) {
