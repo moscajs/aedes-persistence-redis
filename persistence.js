@@ -33,6 +33,8 @@ function RedisPersistence (opts) {
   this.maxSessionDelivery = opts.maxSessionDelivery || 1000
   this._db = new Redis(opts)
 
+  this.msgMap = {}
+
   var that = this
   this._decodeAndAugment = function decodeAndAugment (chunk, enc, cb) {
     that._db.getBuffer(chunk, function decodeMessage (err, result) {
@@ -322,36 +324,54 @@ RedisPersistence.prototype.outgoingEnqueue = function (sub, packet, cb) {
 function updateWithClientData (that, client, packet, cb) {
   var prekey = 'outgoing:' + client.id + ':' + packet.brokerId + ':' + packet.brokerCounter
   var postkey = 'outgoing-id:' + client.id + ':' + packet.messageId
-  var encoded = msgpack.encode(packet)
 
-  that._db.set(prekey, encoded)
-  that._db.set(postkey, encoded, function setPostKey (err, result) {
-    if (err) { return cb(err, client, packet) }
+  that.msgMap[postkey] = prekey
 
-    if (result !== 'OK') {
-      cb(new Error('no such packet'), client, packet)
-    } else {
-      cb(null, client, packet)
-    }
+  that._db.set(prekey, msgpack.encode(packet), function () {
+    cb(null, client, packet)
   })
+
+  // var encoded = msgpack.encode(packet)
+  // that._db.set(prekey, encoded)
+  // that._db.set(postkey, encoded, function setPostKey (err, result) {
+  //   if (err) { return cb(err, client, packet) }
+  //
+  //   if (result !== 'OK') {
+  //     cb(new Error('no such packet'), client, packet)
+  //   } else {
+  //     cb(null, client, packet)
+  //   }
+  // })
 }
 
 function augmentWithBrokerData (that, client, packet, cb) {
   var postkey = 'outgoing-id:' + client.id + ':' + packet.messageId
-  that._db.getBuffer(postkey, function augmentBrokerData (err, buf) {
-    if (err) {
-      return cb(err)
-    }
 
-    if (!buf) {
-      return cb(new Error('no such packet'))
-    }
+  var key = that.msgMap[postkey]
+  var tokens = key.split(':')
+  packet.brokerId = tokens[tokens.length - 2]
+  packet.brokerCounter = tokens[tokens.length - 1]
 
-    var decoded = msgpack.decode(buf)
-    packet.brokerId = decoded.brokerId
-    packet.brokerCounter = decoded.brokerCounter
-    cb(null)
-  })
+  cb(null)
+
+  // that._db.getBuffer(key, function () {
+  //   cb(null)
+  // })
+
+  // that._db.getBuffer(postkey, function augmentBrokerData (err, buf) {
+  //   if (err) {
+  //     return cb(err)
+  //   }
+  //
+  //   if (!buf) {
+  //     return cb(new Error('no such packet'))
+  //   }
+  //
+  //   var decoded = msgpack.decode(buf)
+  //   packet.brokerId = decoded.brokerId
+  //   packet.brokerCounter = decoded.brokerCounter
+  //   cb(null)
+  // })
 }
 
 RedisPersistence.prototype.outgoingUpdate = function (client, packet, cb) {
@@ -372,24 +392,31 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
   var listKey = 'outgoing:' + client.id
   var key = 'outgoing-id:' + client.id + ':' + packet.messageId
 
-  this._db.getBuffer(key, function clearMessageId (err, buf) {
-    if (err) {
-      return cb(err)
-    }
-
-    if (!buf) {
-      return cb()
-    }
-
-    var packet = msgpack.decode(buf)
-    var prekey = listKey + ':' + packet.brokerId + ':' + packet.brokerCounter
-
-    that._db.del(key)
-    that._db.del(prekey)
-    that._db.lrem(listKey, 0, prekey, function lremKey (err) {
-      cb(err, packet)
-    })
+  var mainKey = this.msgMap[key]
+  this.msgMap[key] = null
+  that._db.del(mainKey)
+  that._db.lrem(listKey, 0, mainKey, function lremKey (err) {
+    cb(err, packet)
   })
+
+  // this._db.getBuffer(key, function clearMessageId (err, buf) {
+  //   if (err) {
+  //     return cb(err)
+  //   }
+  //
+  //   if (!buf) {
+  //     return cb()
+  //   }
+  //
+  //   var packet = msgpack.decode(buf)
+  //   var prekey = listKey + ':' + packet.brokerId + ':' + packet.brokerCounter
+  //
+  //   that._db.del(key)
+  //   that._db.del(prekey)
+  //   that._db.lrem(listKey, 0, prekey, function lremKey (err) {
+  //     cb(err, packet)
+  //   })
+  // })
 }
 
 RedisPersistence.prototype.outgoingStream = function (client) {
