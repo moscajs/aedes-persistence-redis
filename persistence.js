@@ -359,6 +359,12 @@ function updateWithClientData (that, client, packet, cb) {
 
   var listKey = 'outgoing:' + client.id
   var packetKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter
+
+  if (packet.cmd && packet.cmd !== 'pubrel') {
+    that.msgMap[postkey] = packetKey
+    return cb(null, client, packet)
+  }
+
   that._db.lrem(listKey, 0, packetKey, function (err, removed) {
     if (err) {
       return cb(err)
@@ -366,15 +372,15 @@ function updateWithClientData (that, client, packet, cb) {
     if (removed === 1) {
       that._db.rpush(listKey, prekey)
     }
-  })
-  that._db.set(prekey, msgpack.encode(packet), function setPostKey (err, result) {
-    if (err) { return cb(err, client, packet) }
+    that._db.set(prekey, msgpack.encode(packet), function setPostKey (err, result) {
+      if (err) { return cb(err, client, packet) }
 
-    if (result !== 'OK') {
-      cb(new Error('no such packet'), client, packet)
-    } else {
-      cb(null, client, packet)
-    }
+      if (result !== 'OK') {
+        cb(new Error('no such packet'), client, packet)
+      } else {
+        cb(null, client, packet)
+      }
+    })
   })
 }
 
@@ -424,11 +430,16 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
       return cb(err)
     }
     var origPacket = msgpack.decode(buf)
-    // origPacket.messageId = packet.messageId
-    that._db.del(clientKey, finish)
+    origPacket.messageId = packet.messageId
 
     var packetKey = 'packet:' + origPacket.brokerId + ':' + origPacket.brokerCounter
     var countKey = 'expected:' + origPacket.brokerId + ':' + origPacket.brokerCounter
+
+    if (clientKey !== packetKey) {
+      that._db.del(clientKey, finish)
+    } else {
+      finish()
+    }
 
     that._db.lrem(listKey, 0, packetKey, finish)
     that._db.decr(countKey, function (err, remained) {
