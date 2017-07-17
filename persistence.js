@@ -406,8 +406,6 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
   var that = this
   var listKey = 'outgoing:' + client.id
   var key = 'outgoing-id:' + client.id + ':' + packet.messageId
-  var packetKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter
-  var countKey = 'expected:' + packet.brokerId + ':' + packet.brokerCounter
 
   var clientKey = this.msgMap[key]
   this.msgMap[key] = null
@@ -428,6 +426,10 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
     var origPacket = msgpack.decode(buf)
     // origPacket.messageId = packet.messageId
     that._db.del(clientKey, finish)
+
+    var packetKey = 'packet:' + origPacket.brokerId + ':' + origPacket.brokerCounter
+    var countKey = 'expected:' + origPacket.brokerId + ':' + origPacket.brokerCounter
+
     that._db.lrem(listKey, 0, packetKey, finish)
     that._db.decr(countKey, function (err, remained) {
       if (err) {
