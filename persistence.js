@@ -436,6 +436,8 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
       }
       if (remained === 0) {
         that._db.del(packetKey, finish)
+      } else {
+        finish()
       }
     })
 
