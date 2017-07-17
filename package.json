@@ -32,7 +32,7 @@
     "tape": "^4.7.0"
   },
   "dependencies": {
-    "aedes-cached-persistence": "^4.0.0",
+    "aedes-cached-persistence": "^5.0.1",
     "from2": "^2.3.0",
     "ioredis": "^3.0.0",
     "msgpack-lite": "^0.1.20",
