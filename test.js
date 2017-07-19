@@ -7,6 +7,10 @@ var mqemitterRedis = require('mqemitter-redis')
 var abs = require('aedes-cached-persistence/abstract')
 var db = new Redis()
 
+db.on('error', function (e) {
+  console.trace(e)
+})
+
 db.on('connect', unref)
 
 function unref () {

@@ -9,6 +9,7 @@ var pump = require('pump')
 var CachedPersistence = require('aedes-cached-persistence')
 var Packet = CachedPersistence.Packet
 var inherits = require('util').inherits
+var HLRU = require('hashlru')
 var Qlobber = require('qlobber').Qlobber
 var qlobberOpts = {
   separator: '/',
@@ -31,7 +32,7 @@ function RedisPersistence (opts) {
   this.maxSessionDelivery = opts.maxSessionDelivery || 1000
   this._db = new Redis(opts)
 
-  this.messageIdCache = {}
+  this.messageIdCache = HLRU(100000)
 
   var that = this
   this._decodeAndAugment = function decodeAndAugment (chunk, enc, cb) {
@@ -340,12 +341,12 @@ function updateWithClientData (that, client, packet, cb) {
   var packetKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter
 
   if (packet.cmd && packet.cmd !== 'pubrel') {
-    that.messageIdCache[messageIdKey] = packetKey
+    that.messageIdCache.set(messageIdKey, packetKey)
     return cb(null, client, packet)
   }
 
   var clientUpdateKey = outgoingKey + client.id + ':' + packet.brokerId + ':' + packet.brokerCounter
-  that.messageIdCache[messageIdKey] = clientUpdateKey
+  that.messageIdCache.set(messageIdKey, clientUpdateKey)
 
   var count = 0
   that._db.lrem(clientListKey, 0, packetKey, function (err, removed) {
@@ -381,7 +382,7 @@ function updateWithClientData (that, client, packet, cb) {
 function augmentWithBrokerData (that, client, packet, cb) {
   var messageIdKey = 'outgoing-id:' + client.id + ':' + packet.messageId
 
-  var key = that.messageIdCache[messageIdKey]
+  var key = that.messageIdCache.get(messageIdKey)
   var tokens = key.split(':')
   packet.brokerId = tokens[tokens.length - 2]
   packet.brokerCounter = tokens[tokens.length - 1]
@@ -407,8 +408,8 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
   var clientListKey = outgoingKey + client.id
   var messageIdKey = 'outgoing-id:' + client.id + ':' + packet.messageId
 
-  var clientKey = this.messageIdCache[messageIdKey]
-  this.messageIdCache[messageIdKey] = null
+  var clientKey = this.messageIdCache.get(messageIdKey)
+  this.messageIdCache.remove(messageIdKey)
 
   if (!clientKey) {
     return cb(null, packet)

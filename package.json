@@ -34,6 +34,7 @@
   "dependencies": {
     "aedes-cached-persistence": "^5.0.1",
     "from2": "^2.3.0",
+    "hashlru": "^2.2.0",
     "ioredis": "^3.0.0",
     "msgpack-lite": "^0.1.20",
     "pump": "^1.0.1",
