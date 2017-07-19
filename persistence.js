@@ -357,17 +357,18 @@ function updateWithClientData (that, client, packet, cb) {
     } else {
       finish()
     }
-    that._db.set(clientUpdateKey, msgpack.encode(packet), function setPostKey (err, result) {
-      if (err) {
-        return cb(err, client, packet)
-      }
+  })
 
-      if (result !== 'OK') {
-        cb(new Error('no such packet'), client, packet)
-      } else {
-        finish()
-      }
-    })
+  that._db.set(clientUpdateKey, msgpack.encode(packet), function setPostKey (err, result) {
+    if (err) {
+      return cb(err, client, packet)
+    }
+
+    if (result !== 'OK') {
+      cb(new Error('no such packet'), client, packet)
+    } else {
+      finish()
+    }
   })
 
   function finish (err) {
