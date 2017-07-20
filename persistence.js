@@ -306,9 +306,6 @@ RedisPersistence.prototype.outgoingEnqueue = function (sub, packet, cb) {
 }
 
 RedisPersistence.prototype.outgoingEnqueueCombi = function (subs, packet, cb) {
-  if (!Array.isArray(subs)) {
-    subs = [subs]
-  }
   var count = 0
   var errored = false
   var packetKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter
