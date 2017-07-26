@@ -403,14 +403,18 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
       errored = err
       return cb(err)
     }
-    var origPacket = msgpack.decode(buf)
-    origPacket.messageId = packet.messageId
+    if (buf) {
+      var origPacket = msgpack.decode(buf)
+      origPacket.messageId = packet.messageId
 
-    var packetKey = 'packet:' + origPacket.brokerId + ':' + origPacket.brokerCounter
-    var countKey = 'packet:' + origPacket.brokerId + ':' + origPacket.brokerCounter + ':offlineCount'
+      var packetKey = 'packet:' + origPacket.brokerId + ':' + origPacket.brokerCounter
+      var countKey = 'packet:' + origPacket.brokerId + ':' + origPacket.brokerCounter + ':offlineCount'
 
-    if (clientKey !== packetKey) { // qos=2
-      that._db.del(clientKey, finish)
+      if (clientKey !== packetKey) { // qos=2
+        that._db.del(clientKey, finish)
+      } else {
+        finish()
+      }
     } else {
       finish()
     }
