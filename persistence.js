@@ -288,6 +288,9 @@ RedisPersistence.prototype.outgoingEnqueue = function (sub, packet, cb) {
 }
 
 RedisPersistence.prototype.outgoingEnqueueCombi = function (subs, packet, cb) {
+  if (!subs || subs.length === 0) {
+    return cb(null, packet)
+  }
   var count = 0
   var errored = false
   var packetKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter
@@ -427,7 +430,7 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
         return cb(err)
       }
       if (remained === 0) {
-        that._db.del(packetKey, finish)
+        that._db.del(packetKey, countKey, finish)
       } else {
         finish()
       }
