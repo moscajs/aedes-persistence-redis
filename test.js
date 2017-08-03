@@ -26,7 +26,8 @@ abs({
   persistence: function () {
     db.flushall()
     return persistence()
-  }
+  },
+  waitForReady: true
 })
 
 function toBroker (id, emitter) {
@@ -60,25 +61,28 @@ test('multiple persistences', function (t) {
     qos: 1
   }]
 
+  instance2._waitFor(client, 'sub', function () {
+    instance2.subscriptionsByTopic('hello', function (err, resubs) {
+      t.notOk(err, 'no error')
+      t.deepEqual(resubs, [{
+        clientId: client.id,
+        topic: 'hello/#',
+        qos: 1
+      }, {
+        clientId: client.id,
+        topic: 'hello',
+        qos: 1
+      }])
+      instance.destroy(t.pass.bind(t, 'first dies'))
+      instance2.destroy(t.pass.bind(t, 'second dies'))
+      emitter.close(t.pass.bind(t, 'first emitter dies'))
+      emitter2.close(t.pass.bind(t, 'second emitter dies'))
+    })
+  })
+
   instance2.on('ready', function () {
     instance.addSubscriptions(client, subs, function (err) {
       t.notOk(err, 'no error')
-      instance2.subscriptionsByTopic('hello', function (err, resubs) {
-        t.notOk(err, 'no error')
-        t.deepEqual(resubs, [{
-          clientId: client.id,
-          topic: 'hello/#',
-          qos: 1
-        }, {
-          clientId: client.id,
-          topic: 'hello',
-          qos: 1
-        }])
-        instance.destroy(t.pass.bind(t, 'first dies'))
-        instance2.destroy(t.pass.bind(t, 'second dies'))
-        emitter.close(t.pass.bind(t, 'first emitter dies'))
-        emitter2.close(t.pass.bind(t, 'second emitter dies'))
-      })
     })
   })
 })
