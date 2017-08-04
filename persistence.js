@@ -513,23 +513,15 @@ RedisPersistence.prototype.streamWill = function (brokers) {
 }
 
 RedisPersistence.prototype.getClientList = function (topic) {
-  var clientIds = this._matcher.match(topic).filter(isTopic).map(toClientIds)
+  var entries = this._matcher.match(topic, topic)
 
   function pushClientList (size, next) {
-    if (clientIds.length === 0) {
+    if (entries.length === 0) {
       return next(null, null)
     }
-    var chunk = clientIds.slice(0, 1)
-    clientIds = clientIds.slice(1)
-    next(null, chunk[0])
-  }
-
-  function isTopic (sub) {
-    return sub.topic === topic
-  }
-
-  function toClientIds (matched) {
-    return matched.clientId
+    var chunk = entries.slice(0, 1)
+    entries = entries.slice(1)
+    next(null, chunk[0].clientId)
   }
 
   return from.obj(pushClientList)
