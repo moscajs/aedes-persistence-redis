@@ -22,8 +22,6 @@ var willKey = 'will'
 var retainedKey = 'retained'
 var outgoingKey = 'outgoing:'
 
-var noop = function () {}
-
 function RedisPersistence (opts) {
   if (!(this instanceof RedisPersistence)) {
     return new RedisPersistence(opts)
@@ -120,8 +118,12 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
     }
   }
 
-  this._db.sadd(subsKey, offlines, noop)
-  this._db.sadd(clientsKey, client.id, noop)
+  if (offlines.length > 0) {
+    this._db.sadd(subsKey, offlines, finish)
+  } else {
+    published++
+  }
+  this._db.sadd(clientsKey, client.id, finish)
   this._db.hmset(clientSubKey, toStore, finish)
 
   this._addedSubscriptions(client, subs, finish)
@@ -129,7 +131,7 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
   function finish (err) {
     errored = err
     published++
-    if (published === 2) {
+    if (published === 4) {
       cb(errored, client)
     }
   }
