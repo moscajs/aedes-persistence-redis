@@ -63,7 +63,7 @@ test('multiple persistences', function (t) {
 
   instance2._waitFor(client, 'sub', function () {
     instance2.subscriptionsByTopic('hello', function (err, resubs) {
-      t.notOk(err, 'no error')
+      t.notOk(err, 'subs by topic no error')
       t.deepEqual(resubs, [{
         clientId: client.id,
         topic: 'hello/#',
@@ -86,7 +86,7 @@ test('multiple persistences', function (t) {
   function check () {
     if (ready && ready2) {
       instance.addSubscriptions(client, subs, function (err) {
-        t.notOk(err, 'no error')
+        t.notOk(err, 'add subs no error')
       })
     }
   }
