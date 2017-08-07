@@ -80,9 +80,24 @@ test('multiple persistences', function (t) {
     })
   })
 
+  var ready = false
+  var ready2 = false
+
+  function check () {
+    if (ready && ready2) {
+      instance.addSubscriptions(client, subs, function (err) {
+        t.notOk(err, 'no error')
+      })
+    }
+  }
+
+  instance.on('ready', function () {
+    ready = true
+    check()
+  })
+
   instance2.on('ready', function () {
-    instance.addSubscriptions(client, subs, function (err) {
-      t.notOk(err, 'no error')
-    })
+    ready2 = true
+    check()
   })
 })
