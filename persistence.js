@@ -106,7 +106,8 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
   var clientSubKey = clientKey + client.id
 
   var toStore = {}
-  var offlines = []
+  var offlinesToAdd = new Set()
+  var offlinesToRemove = new Set()
   var published = 0
   var errored
 
@@ -114,12 +115,21 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
     var sub = subs[i]
     toStore[sub.topic] = sub.qos
     if (sub.qos > 0) {
-      offlines.push(sub.topic)
+      offlinesToAdd.add(sub.topic)
+      offlinesToRemove.delete(sub.topic)
+    } else {
+      offlinesToAdd.delete(sub.topic)
+      offlinesToRemove.add(sub.topic)
     }
   }
 
-  if (offlines.length > 0) {
-    this._db.sadd(subsKey, offlines, finish)
+  if (offlinesToAdd.size > 0) {
+    this._db.sadd(subsKey, Array.from(offlinesToAdd), finish)
+  } else {
+    published++
+  }
+  if (offlinesToRemove.size > 0) {
+    this._db.srem(subsKey, Array.from(offlinesToRemove), finish)
   } else {
     published++
   }
@@ -131,7 +141,7 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
   function finish (err) {
     errored = err
     published++
-    if (published === 4) {
+    if (published === 5) {
       cb(errored, client)
     }
   }
