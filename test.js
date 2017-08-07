@@ -61,6 +61,18 @@ test('multiple persistences', function (t) {
     qos: 1
   }]
 
+  var gotSubs = false
+  var addedSubs = false
+
+  function close () {
+    if (gotSubs && addedSubs) {
+      instance.destroy(t.pass.bind(t, 'first dies'))
+      instance2.destroy(t.pass.bind(t, 'second dies'))
+      emitter.close(t.pass.bind(t, 'first emitter dies'))
+      emitter2.close(t.pass.bind(t, 'second emitter dies'))
+    }
+  }
+
   instance2._waitFor(client, 'sub', function () {
     instance2.subscriptionsByTopic('hello', function (err, resubs) {
       t.notOk(err, 'subs by topic no error')
@@ -73,31 +85,31 @@ test('multiple persistences', function (t) {
         topic: 'hello',
         qos: 1
       }])
-      instance.destroy(t.pass.bind(t, 'first dies'))
-      instance2.destroy(t.pass.bind(t, 'second dies'))
-      emitter.close(t.pass.bind(t, 'first emitter dies'))
-      emitter2.close(t.pass.bind(t, 'second emitter dies'))
+      gotSubs = true
+      close()
     })
   })
 
   var ready = false
   var ready2 = false
 
-  function check () {
+  function addSubs () {
     if (ready && ready2) {
       instance.addSubscriptions(client, subs, function (err) {
         t.notOk(err, 'add subs no error')
+        addedSubs = true
+        close()
       })
     }
   }
 
   instance.on('ready', function () {
     ready = true
-    check()
+    addSubs()
   })
 
   instance2.on('ready', function () {
     ready2 = true
-    check()
+    addSubs()
   })
 })
