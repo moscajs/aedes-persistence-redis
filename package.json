@@ -37,7 +37,7 @@
     "ioredis": "^3.0.0",
     "msgpack-lite": "^0.1.20",
     "pump": "^1.0.1",
-    "qlobber": "^1.5.0",
+    "qlobber": "^1.8.0",
     "through2": "^2.0.0",
     "throughv": "^1.0.3"
   }

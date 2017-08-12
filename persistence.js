@@ -17,7 +17,6 @@ var qlobberOpts = {
 }
 var clientKey = 'client:'
 var clientsKey = 'clients'
-var subsKey = 'subs'
 var willKey = 'will'
 var retainedKey = 'retained'
 var outgoingKey = 'outgoing:'
@@ -106,33 +105,14 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
   var clientSubKey = clientKey + client.id
 
   var toStore = {}
-  var offlinesToAdd = new Set()
-  var offlinesToRemove = new Set()
   var published = 0
   var errored
 
   for (var i = 0; i < subs.length; i++) {
     var sub = subs[i]
     toStore[sub.topic] = sub.qos
-    if (sub.qos > 0) {
-      offlinesToAdd.add(sub.topic)
-      offlinesToRemove.delete(sub.topic)
-    } else {
-      offlinesToAdd.delete(sub.topic)
-      offlinesToRemove.add(sub.topic)
-    }
   }
 
-  if (offlinesToAdd.size > 0) {
-    this._db.sadd(subsKey, Array.from(offlinesToAdd), finish)
-  } else {
-    published++
-  }
-  if (offlinesToRemove.size > 0) {
-    this._db.srem(subsKey, Array.from(offlinesToRemove), finish)
-  } else {
-    published++
-  }
   this._db.sadd(clientsKey, client.id, finish)
   this._db.hmset(clientSubKey, toStore, finish)
 
@@ -141,7 +121,7 @@ RedisPersistence.prototype.addSubscriptions = function (client, subs, cb) {
   function finish (err) {
     errored = err
     published++
-    if (published === 5) {
+    if (published === 3) {
       cb(errored, client)
     }
   }
@@ -155,7 +135,6 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
 
   var clientSubKey = clientKey + client.id
 
-  var removableTopics = []
   var errored = false
   var outstanding = 0
 
@@ -177,24 +156,10 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
     }
   }
 
-  for (var i = 0; i < subs.length; i++) {
-    if (this._matcher.test(subs[i], {
-      clientId: client.id,
-      topic: subs[i]
-    })) {
-      removableTopics.push(subs[i])
-    }
-  }
-
   var that = this
   this._db.hdel(clientSubKey, subs, function subKeysRemoved (err) {
     if (err) {
       return cb(err)
-    }
-
-    if (removableTopics.length > 0) {
-      outstanding++
-      that._db.srem(subsKey, removableTopics, check)
     }
 
     outstanding++
@@ -248,31 +213,14 @@ function returnSubsForClient (subs) {
 }
 
 RedisPersistence.prototype.countOffline = function (cb) {
-  var clientsCount = -1
-  var subsCount = -1
+  var that = this
 
   this._db.scard(clientsKey, function countOfflineClients (err, count) {
     if (err) {
       return cb(err)
     }
 
-    clientsCount = parseInt(count) || 0
-
-    if (subsCount >= 0) {
-      cb(null, subsCount, clientsCount)
-    }
-  })
-
-  this._db.scard(subsKey, function countSubscriptions (err, count) {
-    if (err) {
-      return cb(err)
-    }
-
-    subsCount = parseInt(count) || 0
-
-    if (clientsCount >= 0) {
-      cb(null, subsCount, clientsCount)
-    }
+    cb(null, that._trie.subscriptionsCount, parseInt(count) || 0)
   })
 }
 
@@ -282,7 +230,7 @@ RedisPersistence.prototype.subscriptionsByTopic = function (topic, cb) {
     return this
   }
 
-  var result = this._matcher.match(topic)
+  var result = this._trie.match(topic)
 
   cb(null, result)
 }
@@ -324,7 +272,7 @@ function processKeysForClient (clientId, clientHash, that) {
   var topics = Object.keys(clientHash)
   for (var i = 0; i < topics.length; i++) {
     var topic = topics[i]
-    that._matcher.add(topic, {
+    that._trie.add(topic, {
       clientId: clientId,
       topic: topic,
       qos: clientHash[topic]
@@ -523,7 +471,7 @@ RedisPersistence.prototype.streamWill = function (brokers) {
 }
 
 RedisPersistence.prototype.getClientList = function (topic) {
-  var entries = this._matcher.match(topic, topic)
+  var entries = this._trie.match(topic, topic)
 
   function pushClientList (size, next) {
     if (entries.length === 0) {
