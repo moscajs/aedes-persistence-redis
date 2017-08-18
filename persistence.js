@@ -171,6 +171,8 @@ RedisPersistence.prototype.removeSubscriptions = function (client, subs, cb) {
         return check(err)
       }
       if (subCount === 0) {
+        outstanding++
+        that._db.del(outgoingKey + client.id, check)
         return that._db.srem(clientsKey, client.id, check)
       }
       check()
