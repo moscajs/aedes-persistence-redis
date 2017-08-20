@@ -31,7 +31,7 @@ aedesPersistenceRedis({
   password: 'auth',
   db: 0,
   maxSessionDelivery: 100, // maximum offline messages deliverable on client CONNECT, default is 1000
-  packetTTL: function (packet) { // offline message TTL, default is 30 days
+  packetTTL: function (packet) { // offline message TTL, default is disabled
     return 10 //seconds
   }
 })
