@@ -18,9 +18,12 @@ var qlobberOpts = {
 }
 var clientKey = 'client:'
 var clientsKey = 'clients'
-var willKey = 'will'
+var willsKey = 'will'
+var willKey = 'will:'
 var retainedKey = 'retained'
 var outgoingKey = 'outgoing:'
+var outgoingIdKey = 'outgoing-id:'
+var incomingKey = 'incoming:'
 
 function RedisPersistence (opts) {
   if (!(this instanceof RedisPersistence)) {
@@ -29,25 +32,13 @@ function RedisPersistence (opts) {
 
   opts = opts || {}
   this.maxSessionDelivery = opts.maxSessionDelivery || 1000
-  this._db = new Redis(opts)
+  this.packetTTL = opts.packetTTL || function () { return 0 }
 
   this.messageIdCache = HLRU(100000)
 
-  var that = this
-  this._decodeAndAugment = function decodeAndAugment (chunk, enc, cb) {
-    that._db.getBuffer(chunk, function decodeMessage (err, result) {
-      var decoded
-      if (result) {
-        decoded = msgpack.decode(result)
-      }
-      cb(err, decoded)
-    })
-  }
+  this._db = new Redis(opts)
 
-  this._getChunk = function (chunk, enc, cb) {
-    that._db.hgetBuffer(retainedKey, chunk, cb)
-  }
-
+  this._getRetainedChunkBound = this._getRetainedChunk.bind(this)
   CachedPersistence.call(this, opts)
 }
 
@@ -61,6 +52,10 @@ RedisPersistence.prototype.storeRetained = function (packet, cb) {
   }
 }
 
+RedisPersistence.prototype._getRetainedChunk = function (chunk, enc, cb) {
+  this._db.hgetBuffer(retainedKey, chunk, cb)
+}
+
 RedisPersistence.prototype.createRetainedStreamCombi = function (patterns) {
   var that = this
   var qlobber = new QlobberTrue(qlobberOpts)
@@ -69,7 +64,7 @@ RedisPersistence.prototype.createRetainedStreamCombi = function (patterns) {
     qlobber.add(patterns[i])
   }
 
-  var stream = through.obj(that._getChunk)
+  var stream = through.obj(that._getRetainedChunkBound)
 
   this._db.hkeys(retainedKey, function getKeys (err, keys) {
     if (err) {
@@ -294,14 +289,20 @@ RedisPersistence.prototype.outgoingEnqueueCombi = function (subs, packet, cb) {
     return cb(null, packet)
   }
   var count = 0
+  var outstanding = 1
   var errored = false
   var packetKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter
   var countKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter + ':offlineCount'
-  this._db.mset(
-    packetKey, msgpack.encode(new Packet(packet)),
-    countKey, subs.length,
-    finish
-  )
+  var ttl = this.packetTTL(packet)
+  var encoded = msgpack.encode(new Packet(packet))
+
+  this._db.mset(packetKey, encoded, countKey, subs.length, finish)
+  if (ttl > 0) {
+    outstanding += 2
+    this._db.expire(packetKey, ttl, finish)
+    this._db.expire(countKey, ttl, finish)
+  }
+
   for (var i = 0; i < subs.length; i++) {
     var listKey = outgoingKey + subs[i].clientId
     this._db.rpush(listKey, packetKey, finish)
@@ -313,22 +314,23 @@ RedisPersistence.prototype.outgoingEnqueueCombi = function (subs, packet, cb) {
       errored = err
       return cb(err)
     }
-    if (count === subs.length + 1 && !errored) {
+    if (count === (subs.length + outstanding) && !errored) {
       cb(null, packet)
     }
   }
 }
 
 function updateWithClientData (that, client, packet, cb) {
-  var messageIdKey = 'outgoing-id:' + client.id + ':' + packet.messageId
+  var messageIdKey = outgoingIdKey + client.id + ':' + packet.messageId
   var clientListKey = outgoingKey + client.id
   var packetKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter
 
-  if (packet.cmd && packet.cmd !== 'pubrel') {
+  if (packet.cmd && packet.cmd !== 'pubrel') { // qos=1
     that.messageIdCache.set(messageIdKey, packetKey)
     return cb(null, client, packet)
   }
 
+  // qos=2
   var clientUpdateKey = outgoingKey + client.id + ':' + packet.brokerId + ':' + packet.brokerCounter
   that.messageIdCache.set(messageIdKey, clientUpdateKey)
 
@@ -344,7 +346,16 @@ function updateWithClientData (that, client, packet, cb) {
     }
   })
 
-  that._db.set(clientUpdateKey, msgpack.encode(packet), function setPostKey (err, result) {
+  var ttl = that.packetTTL(packet)
+  var encoded = msgpack.encode(packet)
+
+  if (ttl > 0) {
+    that._db.set(clientUpdateKey, encoded, 'EX', ttl, setPostKey)
+  } else {
+    that._db.set(clientUpdateKey, encoded, setPostKey)
+  }
+
+  function setPostKey (err, result) {
     if (err) {
       return cb(err, client, packet)
     }
@@ -354,7 +365,7 @@ function updateWithClientData (that, client, packet, cb) {
     } else {
       finish()
     }
-  })
+  }
 
   function finish (err) {
     if (++count === 2) {
@@ -364,7 +375,7 @@ function updateWithClientData (that, client, packet, cb) {
 }
 
 function augmentWithBrokerData (that, client, packet, cb) {
-  var messageIdKey = 'outgoing-id:' + client.id + ':' + packet.messageId
+  var messageIdKey = outgoingIdKey + client.id + ':' + packet.messageId
 
   var key = that.messageIdCache.get(messageIdKey)
   var tokens = key.split(':')
@@ -390,7 +401,7 @@ RedisPersistence.prototype.outgoingUpdate = function (client, packet, cb) {
 RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb) {
   var that = this
   var clientListKey = outgoingKey + client.id
-  var messageIdKey = 'outgoing-id:' + client.id + ':' + packet.messageId
+  var messageIdKey = outgoingIdKey + client.id + ':' + packet.messageId
 
   var clientKey = this.messageIdCache.get(messageIdKey)
   this.messageIdCache.remove(messageIdKey)
@@ -452,9 +463,12 @@ RedisPersistence.prototype.outgoingClearMessageId = function (client, packet, cb
 }
 
 RedisPersistence.prototype.outgoingStream = function (client) {
-  var stream = throughv.obj(this._decodeAndAugment)
+  var clientListKey = outgoingKey + client.id
+  var stream = throughv.obj(this._buildAugment(clientListKey))
 
-  this._db.lrange(outgoingKey + client.id, 0, this.maxSessionDelivery, function lrangeResult (err, results) {
+  this._db.lrange(clientListKey, 0, this.maxSessionDelivery, lrangeResult)
+
+  function lrangeResult (err, results) {
     if (err) {
       stream.emit('error', err)
     } else {
@@ -463,20 +477,20 @@ RedisPersistence.prototype.outgoingStream = function (client) {
       }
       stream.end()
     }
-  })
+  }
 
   return stream
 }
 
 RedisPersistence.prototype.incomingStorePacket = function (client, packet, cb) {
-  var key = 'incoming:' + client.id + ':' + packet.messageId
+  var key = incomingKey + client.id + ':' + packet.messageId
   var newp = new Packet(packet)
   newp.messageId = packet.messageId
   this._db.set(key, msgpack.encode(newp), cb)
 }
 
 RedisPersistence.prototype.incomingGetPacket = function (client, packet, cb) {
-  var key = 'incoming:' + client.id + ':' + packet.messageId
+  var key = incomingKey + client.id + ':' + packet.messageId
   this._db.getBuffer(key, function decodeBuffer (err, buf) {
     if (err) {
       return cb(err)
@@ -491,15 +505,15 @@ RedisPersistence.prototype.incomingGetPacket = function (client, packet, cb) {
 }
 
 RedisPersistence.prototype.incomingDelPacket = function (client, packet, cb) {
-  var key = 'incoming:' + client.id + ':' + packet.messageId
+  var key = incomingKey + client.id + ':' + packet.messageId
   this._db.del(key, cb)
 }
 
 RedisPersistence.prototype.putWill = function (client, packet, cb) {
-  var key = 'will:' + this.broker.id + ':' + client.id
+  var key = willKey + this.broker.id + ':' + client.id
   packet.clientId = client.id
   packet.brokerId = this.broker.id
-  this._db.rpush(willKey, key)
+  this._db.rpush(willsKey, key)
   this._db.setBuffer(key, msgpack.encode(packet), encodeBuffer)
 
   function encodeBuffer (err) {
@@ -508,7 +522,7 @@ RedisPersistence.prototype.putWill = function (client, packet, cb) {
 }
 
 RedisPersistence.prototype.getWill = function (client, cb) {
-  var key = 'will:' + this.broker.id + ':' + client.id
+  var key = willKey + this.broker.id + ':' + client.id
   this._db.getBuffer(key, function getWillForClient (err, packet) {
     if (err) { return cb(err) }
 
@@ -523,10 +537,10 @@ RedisPersistence.prototype.getWill = function (client, cb) {
 }
 
 RedisPersistence.prototype.delWill = function (client, cb) {
-  var key = 'will:' + client.brokerId + ':' + client.id
+  var key = willKey + client.brokerId + ':' + client.id
   var result = null
   var that = this
-  this._db.lrem(willKey, 0, key)
+  this._db.lrem(willsKey, 0, key)
   this._db.getBuffer(key, function getClientWill (err, packet) {
     if (err) { return cb(err) }
 
@@ -541,9 +555,9 @@ RedisPersistence.prototype.delWill = function (client, cb) {
 }
 
 RedisPersistence.prototype.streamWill = function (brokers) {
-  var stream = throughv.obj(this._decodeAndAugment)
+  var stream = throughv.obj(this._buildAugment(willsKey))
 
-  this._db.lrange(willKey, 0, 10000, streamWill)
+  this._db.lrange(willsKey, 0, 10000, streamWill)
 
   function streamWill (err, results) {
     if (err) {
@@ -573,6 +587,22 @@ RedisPersistence.prototype.getClientList = function (topic) {
   }
 
   return from.obj(pushClientList)
+}
+
+RedisPersistence.prototype._buildAugment = function (listKey) {
+  var that = this
+  return function decodeAndAugment (key, enc, cb) {
+    that._db.getBuffer(key, function decodeMessage (err, result) {
+      var decoded
+      if (result) {
+        decoded = msgpack.decode(result)
+      }
+      if (err || !decoded) {
+        that._db.lrem(listKey, 0, key)
+      }
+      cb(err, decoded)
+    })
+  }
 }
 
 RedisPersistence.prototype.destroy = function (cb) {

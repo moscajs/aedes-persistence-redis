@@ -43,6 +43,45 @@ function toBroker (id, emitter) {
   }
 }
 
+test('packet ttl', function (t) {
+  t.plan(4)
+  db.flushall()
+  var emitter = mqemitterRedis()
+  var instance = persistence({packetTTL: function () {
+    return 1
+  }})
+  instance.broker = toBroker('1', emitter)
+
+  var subs = [{
+    clientId: 'ttlTest',
+    topic: 'hello',
+    qos: 1
+  }]
+  var packet = {
+    cmd: 'publish',
+    topic: 'hello',
+    payload: 'ttl test',
+    qos: 1,
+    retain: false,
+    brokerId: instance.broker.id,
+    brokerCounter: 42
+  }
+  instance.outgoingEnqueueCombi(subs, packet, function enqueued (err, saved) {
+    t.notOk(err)
+    t.deepEqual(saved, packet)
+    setTimeout(function () {
+      var offlineStream = instance.outgoingStream({id: 'ttlTest'})
+      offlineStream.on('data', function (offlinePacket) {
+        t.notOk(offlinePacket)
+      })
+      offlineStream.on('end', function () {
+        instance.destroy(t.pass.bind(t, 'stop instance'))
+        emitter.close(t.pass.bind(t, 'stop emitter'))
+      })
+    }, 1100)
+  })
+})
+
 test('multiple persistences', function (t) {
   t.plan(7)
   db.flushall()
