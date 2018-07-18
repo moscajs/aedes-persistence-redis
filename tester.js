@@ -21,18 +21,18 @@ function worker (arg, cb) {
     keepalive: 60
   })
   clients[count].on('connect',
-   (function (clientObj) {
-     return function () {
-       connected++
-       if (connected === process.argv[2]) {
-         console.log('done connecting clients', Date.now() - st)
-       }
-       clientObj.subscribe(clientObj.options.clientId, function () {
-         subscriptions++
-       })
-       cb(null, 42 * 2)
-     }
-   }(clients[count]))
+    (function (clientObj) {
+      return function () {
+        connected++
+        if (connected === process.argv[2]) {
+          console.log('done connecting clients', Date.now() - st)
+        }
+        clientObj.subscribe(clientObj.options.clientId, function () {
+          subscriptions++
+        })
+        cb(null, 42 * 2)
+      }
+    }(clients[count]))
   )
   count++
 }

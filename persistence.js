@@ -251,8 +251,7 @@ RedisPersistence.prototype._setup = function () {
     that.ready = true
     that.emit('ready')
     cb()
-  })
-  .on('data', function processKeys (data) {
+  }).on('data', function processKeys (data) {
     processKeysForClient(data.clientId, data.clientHash, that)
   })
 
