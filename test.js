@@ -116,7 +116,7 @@ test('multiple persistences', function (t) {
     }
   }
 
-  instance2._waitFor(client, 'sub', function () {
+  instance2._waitFor(client, 'sub_' + 'hello', function () {
     instance2.subscriptionsByTopic('hello', function (err, resubs) {
       t.notOk(err, 'subs by topic no error')
       t.deepEqual(resubs, [{

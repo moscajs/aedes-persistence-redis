@@ -34,14 +34,14 @@
     "tape": "^4.9.1"
   },
   "dependencies": {
-    "aedes-cached-persistence": "^6.0.0",
+    "aedes-cached-persistence": "^7.0.0",
     "from2": "^2.3.0",
     "hashlru": "^2.2.1",
     "ioredis": "^3.2.2",
     "msgpack-lite": "^0.1.20",
     "pump": "^3.0.0",
-    "qlobber": "^1.8.0",
-    "through2": "^2.0.0",
+    "qlobber": "^3.0.2",
+    "through2": "^3.0.0",
     "throughv": "^1.0.3"
   }
 }
