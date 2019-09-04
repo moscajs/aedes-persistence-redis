@@ -30,6 +30,7 @@
     "mqemitter-redis": "^3.0.0",
     "mqtt": "^3.0.0",
     "pre-commit": "^1.2.2",
+    "snazzy": "^8.0.0",
     "standard": "^14.1.0",
     "tape": "^4.11.0"
   },
