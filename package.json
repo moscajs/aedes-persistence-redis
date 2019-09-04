@@ -26,6 +26,7 @@
     "concat-stream": "^2.0.0",
     "fastq": "^1.6.0",
     "faucet": "0.0.1",
+    "license-checker": "^25.0.1",
     "mqemitter": "^3.0.0",
     "mqemitter-redis": "^3.0.0",
     "mqtt": "^3.0.0",
