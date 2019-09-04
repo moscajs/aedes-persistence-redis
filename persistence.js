@@ -245,7 +245,7 @@ RedisPersistence.prototype._setup = function () {
   var hgetallStream = throughv.obj(function getStream (clientId, enc, cb) {
     var clientSubKey = clientKey + clientId
     that._db.hgetall(clientSubKey, function clientHash (err, hash) {
-      cb(err, {clientHash: hash, clientId: clientId})
+      cb(err, { clientHash: hash, clientId: clientId })
     })
   }, function emitReady (cb) {
     that.ready = true
