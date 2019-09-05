@@ -6,17 +6,17 @@
 \
 [![Known Vulnerabilities](https://snyk.io/test/github/mcollina/aedes-persistence-redis/badge.svg)](https://snyk.io/test/github/mcollina/aedes-persistence-redis)
 [![Coverage Status](https://coveralls.io/repos/mcollina/aedes-persistence-redis/badge.svg?branch=master&service=github)](https://coveralls.io/github/mcollina/aedes-persistence-redis?branch=master)
-[![NPM version](https://img.shields.io/npm/v/aedes-persistence-redis.svg?style=flat)](https://www.npmjs.com/package/aedes-persistence-redis)
-[![NPM downloads](https://img.shields.io/npm/dm/aedes-persistence-redis.svg?style=flat)](https://www.npmjs.com/package/aedes-persistence-redis)
+[![NPM version](https://img.shields.io/npm/v/aedes-persistence-redis.svg?style=flat)](https://npm.im/aedes-persistence-redis)
+[![NPM downloads](https://img.shields.io/npm/dm/aedes-persistence-redis.svg?style=flat)](https://npm.im/aedes-persistence-redis)
 
-[Aedes][aedes] [persistence][persistence], backed by [Redis][redis].
+Aedes Persistence, backed by [Redis][redis].
 
-See [aedes-persistence][persistence] for the full API, and [Aedes][aedes] for usage.
+See [aedes-persistence][aedes-persistence] for the full API, and [Aedes][aedes] for usage.
 
 ## Install
 
 ```sh
-npm i aedes aedes-persistence-redis --save
+npm install aedes aedes-persistence-redis --save
 ```
 
 ## API
@@ -53,6 +53,6 @@ v4 has changed the subscriptions key schema to enhance performance. Please check
 
 MIT
 
-[aedes]: https://github.com/mcollina/aedes
-[persistence]: https://github.com/mcollina/aedes-persistence
+[aedes]: https://npm.im/aedes
+[aedes-persistence]: https://npm.im/aedes-persistence
 [redis]: https://redis.io
