@@ -23,25 +23,28 @@
   },
   "homepage": "https://github.com/mcollina/aedes-persistence-redis#readme",
   "devDependencies": {
-    "concat-stream": "^1.6.2",
+    "concat-stream": "^2.0.0",
     "fastq": "^1.6.0",
     "faucet": "0.0.1",
-    "mqemitter": "^2.2.0",
+    "license-checker": "^25.0.1",
+    "mqemitter": "^3.0.0",
     "mqemitter-redis": "^3.0.0",
-    "mqtt": "^2.18.2",
-    "pre-commit": "^1.1.2",
-    "standard": "^11.0.0",
-    "tape": "^4.9.1"
+    "mqtt": "^3.0.0",
+    "nyc": "^14.1.1",
+    "pre-commit": "^1.2.2",
+    "snazzy": "^8.0.0",
+    "standard": "^14.1.0",
+    "tape": "^4.11.0"
   },
   "dependencies": {
     "aedes-cached-persistence": "^7.0.0",
     "from2": "^2.3.0",
-    "hashlru": "^2.2.1",
-    "ioredis": "^4.2.0",
-    "msgpack-lite": "^0.1.20",
+    "hashlru": "^2.3.0",
+    "ioredis": "^4.14.0",
+    "msgpack-lite": "^0.1.26",
     "pump": "^3.0.0",
-    "qlobber": "^3.0.2",
-    "through2": "^3.0.0",
-    "throughv": "^1.0.3"
+    "qlobber": "^3.1.0",
+    "through2": "^3.0.1",
+    "throughv": "^1.0.4"
   }
 }

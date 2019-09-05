@@ -47,9 +47,11 @@ test('packet ttl', function (t) {
   t.plan(4)
   db.flushall()
   var emitter = mqemitterRedis()
-  var instance = persistence({packetTTL: function () {
-    return 1
-  }})
+  var instance = persistence({
+    packetTTL: function () {
+      return 1
+    }
+  })
   instance.broker = toBroker('1', emitter)
 
   var subs = [{
@@ -70,7 +72,7 @@ test('packet ttl', function (t) {
     t.notOk(err)
     t.deepEqual(saved, packet)
     setTimeout(function () {
-      var offlineStream = instance.outgoingStream({id: 'ttlTest'})
+      var offlineStream = instance.outgoingStream({ id: 'ttlTest' })
       offlineStream.on('data', function (offlinePacket) {
         t.notOk(offlinePacket)
       })
