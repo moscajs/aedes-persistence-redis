@@ -1,8 +1,9 @@
 # aedes-persistence-redis
+
 [![Build Status](https://travis-ci.org/mcollina/aedes-persistence-redis.svg?branch=master)](https://travis-ci.org/mcollina/aedes-persistence-redis)
 [![Dependencies Status](https://david-dm.org/mcollina/aedes-persistence-redis/status.svg)](https://david-dm.org/mcollina/aedes-persistence-redis)
 [![devDependencies Status](https://david-dm.org/mcollina/aedes-persistence-redis/dev-status.svg)](https://david-dm.org/mcollina/aedes-persistence-redis?type=dev)
-<br/>
+\
 [![Known Vulnerabilities](https://snyk.io/test/github/mcollina/aedes-persistence-redis/badge.svg)](https://snyk.io/test/github/mcollina/aedes-persistence-redis)
 [![Coverage Status](https://coveralls.io/repos/mcollina/aedes-persistence-redis/badge.svg?branch=master&service=github)](https://coveralls.io/github/mcollina/aedes-persistence-redis?branch=master)
 [![NPM version](https://img.shields.io/npm/v/aedes-persistence-redis.svg?style=flat)](https://www.npmjs.com/package/aedes-persistence-redis)
@@ -14,17 +15,16 @@ See [aedes-persistence][persistence] for the full API, and [Aedes][aedes] for us
 
 ## Install
 
-```
+```sh
 npm i aedes aedes-persistence-redis --save
 ```
 
 ## API
 
-<a name="constructor"></a>
 ### aedesPersistenceRedis([opts])
 
 Creates a new instance of aedes-persistence-redis.
-It takes all the same options of [ioredis](http://npm.im/ioredis),
+It takes all the same options of [ioredis](https://npm.im/ioredis),
 which is used internally to connect to Redis.
 
 This constructor creates two connections to Redis.
@@ -49,11 +49,10 @@ aedesPersistenceRedis({
 
 v4 has changed the subscriptions key schema to enhance performance. Please check [related PR](https://github.com/mcollina/aedes-persistence-redis/pull/31) for more details.
 
-
 ## License
 
 MIT
 
 [aedes]: https://github.com/mcollina/aedes
 [persistence]: https://github.com/mcollina/aedes-persistence
-[redis]: http://redis.io
+[redis]: https://redis.io
