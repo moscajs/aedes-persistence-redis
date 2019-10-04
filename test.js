@@ -158,3 +158,31 @@ test('multiple persistences', function (t) {
     addSubs()
   })
 })
+
+test('unknown cache key', function (t) {
+  t.plan(3)
+  db.flushall()
+  var emitter = mqemitterRedis()
+  var instance = persistence()
+  var client = { id: 'unknown_pubrec' }
+
+  instance.broker = toBroker('1', emitter)
+
+  // packet with no brokerId
+  var packet = {
+    cmd: 'pubrec',
+    topic: 'hello',
+    qos: 2,
+    retain: false
+  }
+
+  function close () {
+    instance.destroy(t.pass.bind(t, 'instance dies'))
+    emitter.close(t.pass.bind(t, 'emitter dies'))
+  }
+
+  instance.outgoingUpdate(client, packet, function (err, client, packet) {
+    t.equal(err.message, 'unknown key', 'Received unknown PUBREC')
+    close()
+  })
+})
