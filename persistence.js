@@ -377,6 +377,9 @@ function augmentWithBrokerData (that, client, packet, cb) {
   var messageIdKey = outgoingIdKey + client.id + ':' + packet.messageId
 
   var key = that.messageIdCache.get(messageIdKey)
+  if (!key) {
+    return cb(new Error('unknown key'))
+  }
   var tokens = key.split(':')
   packet.brokerId = tokens[tokens.length - 2]
   packet.brokerCounter = tokens[tokens.length - 1]
