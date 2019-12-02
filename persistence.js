@@ -36,7 +36,7 @@ function RedisPersistence (opts) {
 
   this.messageIdCache = HLRU(100000)
 
-  this._db = new Redis(opts)
+  this._db = opts.conn || new Redis(opts)
 
   this._getRetainedChunkBound = this._getRetainedChunk.bind(this)
   CachedPersistence.call(this, opts)

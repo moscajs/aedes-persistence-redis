@@ -45,6 +45,23 @@ aedesPersistenceRedis({
 })
 ```
 
+Alternatively, you can pass in an externally created Redis connection using the
+`conn` option. This can be useful when connecting to a Redis cluster, for example.
+
+Example:
+
+```js
+aedesPersistenceRedis({
+  conn: new Redis.Cluster([{
+    port: 6379,
+    host: '127.0.0.1'
+  }, {
+    port: 6380,
+    host: '127.0.0.1'
+  }])
+})
+```
+
 ### Changes in v4.x
 
 v4 has changed the subscriptions key schema to enhance performance. Please check [related PR](https://github.com/mcollina/aedes-persistence-redis/pull/31) for more details.
