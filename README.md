@@ -1,6 +1,6 @@
 # aedes-persistence-redis
 
-[![Build Status](https://travis-ci.org/mcollina/aedes-persistence-redis.svg?branch=master)](https://travis-ci.org/mcollina/aedes-persistence-redis)
+![.github/workflows/ci.yml](https://github.com/robertsLando/aedes-persistence-redis/workflows/.github/workflows/ci.yml/badge.svg)
 [![Dependencies Status](https://david-dm.org/mcollina/aedes-persistence-redis/status.svg)](https://david-dm.org/mcollina/aedes-persistence-redis)
 [![devDependencies Status](https://david-dm.org/mcollina/aedes-persistence-redis/dev-status.svg)](https://david-dm.org/mcollina/aedes-persistence-redis?type=dev)
 \
