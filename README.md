@@ -1,11 +1,11 @@
 # aedes-persistence-redis
 
 ![.github/workflows/ci.yml](https://github.com/robertsLando/aedes-persistence-redis/workflows/.github/workflows/ci.yml/badge.svg)
-[![Dependencies Status](https://david-dm.org/mcollina/aedes-persistence-redis/status.svg)](https://david-dm.org/mcollina/aedes-persistence-redis)
-[![devDependencies Status](https://david-dm.org/mcollina/aedes-persistence-redis/dev-status.svg)](https://david-dm.org/mcollina/aedes-persistence-redis?type=dev)
+[![Dependencies Status](https://david-dm.org/moscajs/aedes-persistence-redis/status.svg)](https://david-dm.org/moscajs/aedes-persistence-redis)
+[![devDependencies Status](https://david-dm.org/moscajs/aedes-persistence-redis/dev-status.svg)](https://david-dm.org/moscajs/aedes-persistence-redis?type=dev)
 \
-[![Known Vulnerabilities](https://snyk.io/test/github/mcollina/aedes-persistence-redis/badge.svg)](https://snyk.io/test/github/mcollina/aedes-persistence-redis)
-[![Coverage Status](https://coveralls.io/repos/mcollina/aedes-persistence-redis/badge.svg?branch=master&service=github)](https://coveralls.io/github/mcollina/aedes-persistence-redis?branch=master)
+[![Known Vulnerabilities](https://snyk.io/test/github/moscajs/aedes-persistence-redis/badge.svg)](https://snyk.io/test/github/moscajs/aedes-persistence-redis)
+[![Coverage Status](https://coveralls.io/repos/moscajs/aedes-persistence-redis/badge.svg?branch=master&service=github)](https://coveralls.io/github/moscajs/aedes-persistence-redis?branch=master)
 [![NPM version](https://img.shields.io/npm/v/aedes-persistence-redis.svg?style=flat)](https://npm.im/aedes-persistence-redis)
 [![NPM downloads](https://img.shields.io/npm/dm/aedes-persistence-redis.svg?style=flat)](https://npm.im/aedes-persistence-redis)
 
@@ -47,7 +47,7 @@ aedesPersistenceRedis({
 
 ### Changes in v4.x
 
-v4 has changed the subscriptions key schema to enhance performance. Please check [related PR](https://github.com/mcollina/aedes-persistence-redis/pull/31) for more details.
+v4 has changed the subscriptions key schema to enhance performance. Please check [related PR](https://github.com/moscajs/aedes-persistence-redis/pull/31) for more details.
 
 ## License
 
