@@ -293,7 +293,11 @@ RedisPersistence.prototype.outgoingEnqueueCombi = function (subs, packet, cb) {
   var packetKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter
   var countKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter + ':offlineCount'
   var ttl = this.packetTTL(packet)
-  var encoded = msgpack.encode(new Packet(packet))
+
+  var newp = new Packet(packet)
+  if (!newp.messageId) delete newp.messageId
+
+  var encoded = msgpack.encode(newp)
 
   this._db.mset(packetKey, encoded, countKey, subs.length, finish)
   if (ttl > 0) {
@@ -326,7 +330,9 @@ function updateWithClientData (that, client, packet, cb) {
 
   if (packet.cmd && packet.cmd !== 'pubrel') { // qos=1
     that.messageIdCache.set(messageIdKey, packetKey)
-    return cb(null, client, packet)
+    return that._db.set(packetKey, msgpack.encode(packet), function updatePacket () {
+      cb(null, client, packet)
+    })
   }
 
   // qos=2
@@ -346,6 +352,9 @@ function updateWithClientData (that, client, packet, cb) {
   })
 
   var ttl = that.packetTTL(packet)
+
+  if (!packet.messageId) delete packet.messageId
+
   var encoded = msgpack.encode(packet)
 
   if (ttl > 0) {
@@ -389,7 +398,7 @@ function augmentWithBrokerData (that, client, packet, cb) {
 
 RedisPersistence.prototype.outgoingUpdate = function (client, packet, cb) {
   var that = this
-  if (packet.brokerId) {
+  if (packet.brokerId && packet.messageId) {
     updateWithClientData(this, client, packet, cb)
   } else {
     augmentWithBrokerData(this, client, packet, function updateClient (err) {
