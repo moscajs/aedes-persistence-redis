@@ -331,8 +331,16 @@ function updateWithClientData (that, client, packet, cb) {
 
   if (packet.cmd && packet.cmd !== 'pubrel') { // qos=1
     that.messageIdCache.set(messageIdKey, packetKey)
-    return that._db.set(packetKey, msgpack.encode(packet), function updatePacket () {
-      cb(null, client, packet)
+    return that._db.set(packetKey, msgpack.encode(packet), function updatePacket (err, result) {
+      if (err) {
+        return cb(err, client, packet)
+      }
+
+      if (result !== 'OK') {
+        cb(new Error('no such packet'), client, packet)
+      } else {
+        cb(null, client, packet)
+      }
     })
   }
 
