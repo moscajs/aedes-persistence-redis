@@ -1,29 +1,30 @@
 'use strict'
 
-var Redis = require('ioredis')
-var from = require('from2')
-var through = require('through2')
-var throughv = require('throughv')
-var msgpack = require('msgpack-lite')
-var pump = require('pump')
-var CachedPersistence = require('aedes-cached-persistence')
-var Packet = CachedPersistence.Packet
-var inherits = require('util').inherits
-var HLRU = require('hashlru')
-var QlobberTrue = require('qlobber').QlobberTrue
-var qlobberOpts = {
+const Redis = require('ioredis')
+const from = require('from2')
+const through = require('through2')
+const throughv = require('throughv')
+const msgpack = require('msgpack-lite')
+const pump = require('pump')
+const CachedPersistence = require('aedes-cached-persistence')
+const Packet = CachedPersistence.Packet
+const inherits = require('util').inherits
+const HLRU = require('hashlru')
+const QlobberTrue = require('qlobber').QlobberTrue
+const qlobberOpts = {
   separator: '/',
   wildcard_one: '+',
-  wildcard_some: '#'
+  wildcard_some: '#',
+  match_empty_levels: true
 }
-var clientKey = 'client:'
-var clientsKey = 'clients'
-var willsKey = 'will'
-var willKey = 'will:'
-var retainedKey = 'retained'
-var outgoingKey = 'outgoing:'
-var outgoingIdKey = 'outgoing-id:'
-var incomingKey = 'incoming:'
+const clientKey = 'client:'
+const clientsKey = 'clients'
+const willsKey = 'will'
+const willKey = 'will:'
+const retainedKey = 'retained'
+const outgoingKey = 'outgoing:'
+const outgoingIdKey = 'outgoing-id:'
+const incomingKey = 'incoming:'
 
 function RedisPersistence (opts) {
   if (!(this instanceof RedisPersistence)) {
