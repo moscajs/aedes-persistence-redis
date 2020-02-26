@@ -4,7 +4,7 @@ var test = require('tape').test
 var persistence = require('./')
 var Redis = require('ioredis')
 var mqemitterRedis = require('mqemitter-redis')
-var abs = require('../aedes-cached-persistence/abstract')
+var abs = require('aedes-cached-persistence/abstract')
 var db = new Redis()
 
 db.on('error', function (e) {
