@@ -1,29 +1,30 @@
 'use strict'
 
-var Redis = require('ioredis')
-var from = require('from2')
-var through = require('through2')
-var throughv = require('throughv')
-var msgpack = require('msgpack-lite')
-var pump = require('pump')
-var CachedPersistence = require('aedes-cached-persistence')
-var Packet = CachedPersistence.Packet
-var inherits = require('util').inherits
-var HLRU = require('hashlru')
-var QlobberTrue = require('qlobber').QlobberTrue
-var qlobberOpts = {
+const Redis = require('ioredis')
+const from = require('from2')
+const through = require('through2')
+const throughv = require('throughv')
+const msgpack = require('msgpack-lite')
+const pump = require('pump')
+const CachedPersistence = require('aedes-cached-persistence')
+const Packet = CachedPersistence.Packet
+const inherits = require('util').inherits
+const HLRU = require('hashlru')
+const QlobberTrue = require('qlobber').QlobberTrue
+const qlobberOpts = {
   separator: '/',
   wildcard_one: '+',
-  wildcard_some: '#'
+  wildcard_some: '#',
+  match_empty_levels: true
 }
-var clientKey = 'client:'
-var clientsKey = 'clients'
-var willsKey = 'will'
-var willKey = 'will:'
-var retainedKey = 'retained'
-var outgoingKey = 'outgoing:'
-var outgoingIdKey = 'outgoing-id:'
-var incomingKey = 'incoming:'
+const clientKey = 'client:'
+const clientsKey = 'clients'
+const willsKey = 'will'
+const willKey = 'will:'
+const retainedKey = 'retained'
+const outgoingKey = 'outgoing:'
+const outgoingIdKey = 'outgoing-id:'
+const incomingKey = 'incoming:'
 
 function RedisPersistence (opts) {
   if (!(this instanceof RedisPersistence)) {
@@ -293,6 +294,7 @@ RedisPersistence.prototype.outgoingEnqueueCombi = function (subs, packet, cb) {
   var packetKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter
   var countKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter + ':offlineCount'
   var ttl = this.packetTTL(packet)
+
   var encoded = msgpack.encode(new Packet(packet))
 
   this._db.mset(packetKey, encoded, countKey, subs.length, finish)
@@ -326,7 +328,17 @@ function updateWithClientData (that, client, packet, cb) {
 
   if (packet.cmd && packet.cmd !== 'pubrel') { // qos=1
     that.messageIdCache.set(messageIdKey, packetKey)
-    return cb(null, client, packet)
+    return that._db.set(packetKey, msgpack.encode(packet), function updatePacket (err, result) {
+      if (err) {
+        return cb(err, client, packet)
+      }
+
+      if (result !== 'OK') {
+        cb(new Error('no such packet'), client, packet)
+      } else {
+        cb(null, client, packet)
+      }
+    })
   }
 
   // qos=2
@@ -346,6 +358,7 @@ function updateWithClientData (that, client, packet, cb) {
   })
 
   var ttl = that.packetTTL(packet)
+
   var encoded = msgpack.encode(packet)
 
   if (ttl > 0) {
@@ -389,7 +402,7 @@ function augmentWithBrokerData (that, client, packet, cb) {
 
 RedisPersistence.prototype.outgoingUpdate = function (client, packet, cb) {
   var that = this
-  if (packet.brokerId) {
+  if (packet.brokerId && packet.messageId) {
     updateWithClientData(this, client, packet, cb)
   } else {
     augmentWithBrokerData(this, client, packet, function updateClient (err) {
