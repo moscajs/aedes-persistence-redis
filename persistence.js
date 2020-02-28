@@ -295,10 +295,7 @@ RedisPersistence.prototype.outgoingEnqueueCombi = function (subs, packet, cb) {
   var countKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter + ':offlineCount'
   var ttl = this.packetTTL(packet)
 
-  var newp = new Packet(packet)
-  if (!newp.messageId) delete newp.messageId
-
-  var encoded = msgpack.encode(newp)
+  var encoded = msgpack.encode(new Packet(packet))
 
   this._db.mset(packetKey, encoded, countKey, subs.length, finish)
   if (ttl > 0) {
@@ -361,8 +358,6 @@ function updateWithClientData (that, client, packet, cb) {
   })
 
   var ttl = that.packetTTL(packet)
-
-  if (!packet.messageId) delete packet.messageId
 
   var encoded = msgpack.encode(packet)
 

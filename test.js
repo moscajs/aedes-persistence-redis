@@ -17,12 +17,6 @@ function unref () {
   this.connector.stream.unref()
 }
 
-test.onFinish(function () {
-  db.quit(function () {
-    process.exit(0)
-  })
-})
-
 abs({
   test: test,
   buildEmitter: function () {
