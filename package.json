@@ -59,7 +59,7 @@
     "release-it": "^13.5.6",
     "snazzy": "^8.0.0",
     "standard": "^14.3.3",
-    "tape": "^4.13.2"
+    "tape": "^5.0.0"
   },
   "dependencies": {
     "aedes-cached-persistence": "^8.1.0",
