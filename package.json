@@ -1,6 +1,6 @@
 {
   "name": "aedes-persistence-redis",
-  "version": "7.0.0",
+  "version": "8.0.0",
   "description": "Aedes persistence, backed by redis",
   "main": "persistence.js",
   "scripts": {
