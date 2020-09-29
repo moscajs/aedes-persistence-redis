@@ -17,6 +17,33 @@ function unref () {
   this.connector.stream.unref()
 }
 
+test('external Redis conn', function (t) {
+  t.plan(2)
+
+  var externalRedis = new Redis()
+  var emitter = mqemitterRedis()
+
+  db.on('error', function (e) {
+    t.notOk(e)
+  })
+
+  db.on('connect', function () {
+    t.pass('redis connected')
+  })
+  var instance = persistence({
+    conn: externalRedis
+  })
+
+  instance.broker = toBroker('1', emitter)
+
+  instance.on('ready', function () {
+    t.pass('instance ready')
+    externalRedis.disconnect()
+    instance.destroy()
+    emitter.close()
+  })
+})
+
 abs({
   test: test,
   buildEmitter: function () {
