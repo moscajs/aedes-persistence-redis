@@ -62,11 +62,11 @@ aedesPersistenceRedis({
 })
 ```
 
-The same as above but with `clusters` option:
+The same as above but with `cluster` option:
 
 ```js
 aedesPersistenceRedis({
-  clusters: [{
+  cluster: [{
     port: 6379,
     host: '127.0.0.1'
   }, {
