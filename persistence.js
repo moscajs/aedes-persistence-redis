@@ -37,8 +37,8 @@ function RedisPersistence (opts) {
 
   this.messageIdCache = HLRU(100000)
 
-  if (opts.clusters) {
-    this._db = new Redis.Cluster(opts.clusters)
+  if (opts.cluster) {
+    this._db = new Redis.Cluster(opts.cluster)
   } else {
     this._db = opts.conn || new Redis(opts)
   }
