@@ -111,6 +111,48 @@ test('packet ttl', function (t) {
   })
 })
 
+test('outgoingUpdate doesn\'t clear packet ttl', function (t) {
+  t.plan(3)
+  db.flushall()
+  const emitter = mqemitterRedis()
+  const instance = persistence({
+    packetTTL: function () {
+      return 1
+    }
+  })
+  instance.broker = toBroker('1', emitter)
+
+  const client = {
+    id: 'ttlTest'
+  }
+  const subs = [{
+    clientId: client.clientId,
+    topic: 'hello',
+    qos: 1
+  }]
+  const packet = {
+    cmd: 'publish',
+    topic: 'hello',
+    payload: 'ttl test',
+    qos: 1,
+    retain: false,
+    brokerId: instance.broker.id,
+    brokerCounter: 42,
+    messageId: 123
+  }
+  instance.outgoingEnqueueCombi(subs, packet, function enqueued (err, saved) {
+    t.notOk(err)
+    t.deepEqual(saved, packet)
+    instance.outgoingUpdate(client, packet, function updated () {
+      setTimeout(function () {
+        db.exists('packet:1:42', (_, exists) => {
+          t.notOk(exists, 'packet key should have expired')
+        })
+      }, 1100)
+    })
+  })
+})
+
 test('multiple persistences', function (t) {
   t.plan(7)
   db.flushall()
