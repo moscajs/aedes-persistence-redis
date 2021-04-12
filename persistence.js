@@ -330,19 +330,14 @@ function updateWithClientData (that, client, packet, cb) {
   var clientListKey = outgoingKey + client.id
   var packetKey = 'packet:' + packet.brokerId + ':' + packet.brokerCounter
 
+  var ttl = that.packetTTL(packet)
   if (packet.cmd && packet.cmd !== 'pubrel') { // qos=1
     that.messageIdCache.set(messageIdKey, packetKey)
-    return that._db.set(packetKey, msgpack.encode(packet), function updatePacket (err, result) {
-      if (err) {
-        return cb(err, client, packet)
-      }
-
-      if (result !== 'OK') {
-        cb(new Error('no such packet'), client, packet)
-      } else {
-        cb(null, client, packet)
-      }
-    })
+    if (ttl > 0) {
+      return that._db.set(packetKey, msgpack.encode(packet), 'EX', ttl, updatePacket)
+    } else {
+      return that._db.set(packetKey, msgpack.encode(packet), updatePacket)
+    }
   }
 
   // qos=2
@@ -361,14 +356,24 @@ function updateWithClientData (that, client, packet, cb) {
     }
   })
 
-  var ttl = that.packetTTL(packet)
-
   var encoded = msgpack.encode(packet)
 
   if (ttl > 0) {
     that._db.set(clientUpdateKey, encoded, 'EX', ttl, setPostKey)
   } else {
     that._db.set(clientUpdateKey, encoded, setPostKey)
+  }
+
+  function updatePacket (err, result) {
+    if (err) {
+      return cb(err, client, packet)
+    }
+
+    if (result !== 'OK') {
+      cb(new Error('no such packet'), client, packet)
+    } else {
+      cb(null, client, packet)
+    }
   }
 
   function setPostKey (err, result) {

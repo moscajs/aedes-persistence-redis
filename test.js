@@ -44,22 +44,33 @@ test('external Redis conn', function (t) {
   })
 })
 
-abs({
-  test: test,
-  buildEmitter: function () {
-    var emitter = mqemitterRedis()
+{
+  const emittersBuiltForForAbs = []
+  abs({
+    test: test,
+    buildEmitter: function () {
+      const emitter = mqemitterRedis()
+      emitter.subConn.on('connect', unref)
+      emitter.pubConn.on('connect', unref)
 
-    emitter.subConn.on('connect', unref)
-    emitter.pubConn.on('connect', unref)
+      emittersBuiltForForAbs.push(emitter)
+      return emitter
+    },
+    persistence: function () {
+      db.flushall()
+      return persistence()
+    },
+    waitForReady: true
+  })
 
-    return emitter
-  },
-  persistence: function () {
-    db.flushall()
-    return persistence()
-  },
-  waitForReady: true
-})
+  test('close emitter for abs', function (t) {
+    t.plan(emittersBuiltForForAbs.length)
+
+    emittersBuiltForForAbs.forEach((emitter, i) => {
+      emitter.close(t.pass.bind(t, `emittersBuiltForAbs#${i} dies`))
+    })
+  })
+}
 
 function toBroker (id, emitter) {
   return {
@@ -108,6 +119,50 @@ test('packet ttl', function (t) {
         emitter.close(t.pass.bind(t, 'stop emitter'))
       })
     }, 1100)
+  })
+})
+
+test('outgoingUpdate doesn\'t clear packet ttl', function (t) {
+  t.plan(5)
+  db.flushall()
+  const emitter = mqemitterRedis()
+  const instance = persistence({
+    packetTTL: function () {
+      return 1
+    }
+  })
+  instance.broker = toBroker('1', emitter)
+
+  const client = {
+    id: 'ttlTest'
+  }
+  const subs = [{
+    clientId: client.clientId,
+    topic: 'hello',
+    qos: 1
+  }]
+  const packet = {
+    cmd: 'publish',
+    topic: 'hello',
+    payload: 'ttl test',
+    qos: 1,
+    retain: false,
+    brokerId: instance.broker.id,
+    brokerCounter: 42,
+    messageId: 123
+  }
+  instance.outgoingEnqueueCombi(subs, packet, function enqueued (err, saved) {
+    t.notOk(err)
+    t.deepEqual(saved, packet)
+    instance.outgoingUpdate(client, packet, function updated () {
+      setTimeout(function () {
+        db.exists('packet:1:42', (_, exists) => {
+          t.notOk(exists, 'packet key should have expired')
+        })
+        instance.destroy(t.pass.bind(t, 'instance dies'))
+        emitter.close(t.pass.bind(t, 'emitter dies'))
+      }, 1100)
+    })
   })
 })
 
@@ -212,4 +267,8 @@ test('unknown cache key', function (t) {
     t.equal(err.message, 'unknown key', 'Received unknown PUBREC')
     close()
   })
+})
+
+test.onFinish(function () {
+  db.disconnect()
 })
