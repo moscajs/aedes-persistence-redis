@@ -110,49 +110,49 @@ test('packet ttl', function (t) {
   })
 })
 
-// test('outgoingUpdate doesn\'t clear packet ttl', function (t) {
-//   t.plan(5)
-//   db.flushall()
-//   const emitter = mqemitterRedis()
-//   const instance = persistence({
-//     packetTTL: function () {
-//       return 1
-//     }
-//   })
-//   instance.broker = toBroker('1', emitter)
+test('outgoingUpdate doesn\'t clear packet ttl', function (t) {
+  t.plan(5)
+  db.flushall()
+  const emitter = mqemitterRedis()
+  const instance = persistence({
+    packetTTL: function () {
+      return 1
+    }
+  })
+  instance.broker = toBroker('1', emitter)
 
-//   const client = {
-//     id: 'ttlTest'
-//   }
-//   const subs = [{
-//     clientId: client.clientId,
-//     topic: 'hello',
-//     qos: 1
-//   }]
-//   const packet = {
-//     cmd: 'publish',
-//     topic: 'hello',
-//     payload: 'ttl test',
-//     qos: 1,
-//     retain: false,
-//     brokerId: instance.broker.id,
-//     brokerCounter: 42,
-//     messageId: 123
-//   }
-//   instance.outgoingEnqueueCombi(subs, packet, function enqueued (err, saved) {
-//     t.notOk(err)
-//     t.deepEqual(saved, packet)
-//     instance.outgoingUpdate(client, packet, function updated () {
-//       setTimeout(function () {
-//         db.exists('packet:1:42', (_, exists) => {
-//           t.notOk(exists, 'packet key should have expired')
-//         })
-//         instance.destroy(t.pass.bind(t, 'instance dies'))
-//         emitter.close(t.pass.bind(t, 'emitter dies'))
-//       }, 1100)
-//     })
-//   })
-// })
+  const client = {
+    id: 'ttlTest'
+  }
+  const subs = [{
+    clientId: client.clientId,
+    topic: 'hello',
+    qos: 1
+  }]
+  const packet = {
+    cmd: 'publish',
+    topic: 'hello',
+    payload: 'ttl test',
+    qos: 1,
+    retain: false,
+    brokerId: instance.broker.id,
+    brokerCounter: 42,
+    messageId: 123
+  }
+  instance.outgoingEnqueueCombi(subs, packet, function enqueued (err, saved) {
+    t.notOk(err)
+    t.deepEqual(saved, packet)
+    instance.outgoingUpdate(client, packet, function updated () {
+      setTimeout(function () {
+        db.exists('packet:1:42', (_, exists) => {
+          t.notOk(exists, 'packet key should have expired')
+        })
+        instance.destroy(t.pass.bind(t, 'instance dies'))
+        emitter.close(t.pass.bind(t, 'emitter dies'))
+      }, 1100)
+    })
+  })
+})
 
 test('multiple persistences', function (t) {
   t.plan(7)
@@ -257,6 +257,6 @@ test('unknown cache key', function (t) {
   })
 })
 
-// test.onFinish(function () {
-//   db.disconnect()
-// })
+test.onFinish(function () {
+  process.exit(0)
+})
