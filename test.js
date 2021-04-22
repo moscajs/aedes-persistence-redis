@@ -44,33 +44,21 @@ test('external Redis conn', function (t) {
   })
 })
 
-{
-  const emittersBuiltForForAbs = []
-  abs({
-    test: test,
-    buildEmitter: function () {
-      const emitter = mqemitterRedis()
-      emitter.subConn.on('connect', unref)
-      emitter.pubConn.on('connect', unref)
+abs({
+  test: test,
+  buildEmitter: function () {
+    const emitter = mqemitterRedis()
+    emitter.subConn.on('connect', unref)
+    emitter.pubConn.on('connect', unref)
 
-      emittersBuiltForForAbs.push(emitter)
-      return emitter
-    },
-    persistence: function () {
-      db.flushall()
-      return persistence()
-    },
-    waitForReady: true
-  })
-
-  test('close emitter for abs', function (t) {
-    t.plan(emittersBuiltForForAbs.length)
-
-    emittersBuiltForForAbs.forEach((emitter, i) => {
-      emitter.close(t.pass.bind(t, `emittersBuiltForAbs#${i} dies`))
-    })
-  })
-}
+    return emitter
+  },
+  persistence: function () {
+    db.flushall()
+    return persistence()
+  },
+  waitForReady: true
+})
 
 function toBroker (id, emitter) {
   return {
