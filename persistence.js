@@ -1,5 +1,5 @@
 const Redis = require('ioredis')
-const from = require('from2')
+const { Readable } = require('stream')
 const through = require('through2')
 const throughv = require('throughv')
 const msgpack = require('msgpack-lite')
@@ -458,19 +458,15 @@ class RedisPersistence extends CachedPersistence {
     return stream
   }
 
-  getClientList (topic) {
-    let entries = this._trie.match(topic, topic)
-
-    function pushClientList (size, next) {
-      if (entries.length === 0) {
-        return next(null, null)
-      }
-      const chunk = entries.slice(0, 1)
-      entries = entries.slice(1)
-      next(null, chunk[0].clientId)
+  * #getClientIdFromEntries (entries) {
+    for (const entry of entries) {
+      yield entry.clientId
     }
+  }
 
-    return from.obj(pushClientList)
+  getClientList (topic) {
+    const entries = this._trie.match(topic, topic)
+    return Readable.from(this.#getClientIdFromEntries(entries))
   }
 
   _buildAugment (listKey) {
