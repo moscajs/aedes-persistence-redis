@@ -25,7 +25,7 @@ const incomingKey = 'incoming:'
 
 class RedisPersistence extends CachedPersistence {
   constructor (opts = {}) {
-    super()
+    super(opts)
     this.maxSessionDelivery = opts.maxSessionDelivery || 1000
     this.packetTTL = opts.packetTTL || (() => { return 0 })
 
@@ -38,7 +38,6 @@ class RedisPersistence extends CachedPersistence {
     }
 
     this._getRetainedChunkBound = this._getRetainedChunk.bind(this)
-    CachedPersistence.call(this, opts)
   }
 
   storeRetained (packet, cb) {
