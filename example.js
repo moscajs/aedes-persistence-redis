@@ -1,9 +1,9 @@
-var mq = require('mqemitter-redis')()
-var persistence = require('.')()
-var aedes = require('aedes')({
+const mq = require('mqemitter-redis')()
+const persistence = require('.')()
+const aedes = require('aedes')({
   mq,
   persistence
 })
-var server = require('net').createServer(aedes.handle)
+const server = require('net').createServer(aedes.handle)
 
 server.listen(1883)

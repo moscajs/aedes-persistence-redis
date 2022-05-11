@@ -1,13 +1,11 @@
-'use strict'
+const test = require('tape').test
+const persistence = require('./')
+const Redis = require('ioredis')
+const mqemitterRedis = require('mqemitter-redis')
+const abs = require('aedes-cached-persistence/abstract')
+const db = new Redis()
 
-var test = require('tape').test
-var persistence = require('./')
-var Redis = require('ioredis')
-var mqemitterRedis = require('mqemitter-redis')
-var abs = require('aedes-cached-persistence/abstract')
-var db = new Redis()
-
-db.on('error', function (e) {
+db.on('error', e => {
   console.trace(e)
 })
 
@@ -17,26 +15,26 @@ function unref () {
   this.connector.stream.unref()
 }
 
-test('external Redis conn', function (t) {
+test('external Redis conn', t => {
   t.plan(2)
 
-  var externalRedis = new Redis()
-  var emitter = mqemitterRedis()
+  const externalRedis = new Redis()
+  const emitter = mqemitterRedis()
 
-  db.on('error', function (e) {
+  db.on('error', e => {
     t.notOk(e)
   })
 
-  db.on('connect', function () {
+  db.on('connect', () => {
     t.pass('redis connected')
   })
-  var instance = persistence({
+  const instance = persistence({
     conn: externalRedis
   })
 
   instance.broker = toBroker('1', emitter)
 
-  instance.on('ready', function () {
+  instance.on('ready', () => {
     t.pass('instance ready')
     externalRedis.disconnect()
     instance.destroy()
@@ -45,15 +43,15 @@ test('external Redis conn', function (t) {
 })
 
 abs({
-  test: test,
-  buildEmitter: function () {
+  test,
+  buildEmitter () {
     const emitter = mqemitterRedis()
     emitter.subConn.on('connect', unref)
     emitter.pubConn.on('connect', unref)
 
     return emitter
   },
-  persistence: function () {
+  persistence () {
     db.flushall()
     return persistence()
   },
@@ -62,30 +60,30 @@ abs({
 
 function toBroker (id, emitter) {
   return {
-    id: id,
+    id,
     publish: emitter.emit.bind(emitter),
     subscribe: emitter.on.bind(emitter),
     unsubscribe: emitter.removeListener.bind(emitter)
   }
 }
 
-test('packet ttl', function (t) {
+test('packet ttl', t => {
   t.plan(4)
   db.flushall()
-  var emitter = mqemitterRedis()
-  var instance = persistence({
-    packetTTL: function () {
+  const emitter = mqemitterRedis()
+  const instance = persistence({
+    packetTTL () {
       return 1
     }
   })
   instance.broker = toBroker('1', emitter)
 
-  var subs = [{
+  const subs = [{
     clientId: 'ttlTest',
     topic: 'hello',
     qos: 1
   }]
-  var packet = {
+  const packet = {
     cmd: 'publish',
     topic: 'hello',
     payload: 'ttl test',
@@ -97,12 +95,12 @@ test('packet ttl', function (t) {
   instance.outgoingEnqueueCombi(subs, packet, function enqueued (err, saved) {
     t.notOk(err)
     t.deepEqual(saved, packet)
-    setTimeout(function () {
-      var offlineStream = instance.outgoingStream({ id: 'ttlTest' })
-      offlineStream.on('data', function (offlinePacket) {
+    setTimeout(() => {
+      const offlineStream = instance.outgoingStream({ id: 'ttlTest' })
+      offlineStream.on('data', offlinePacket => {
         t.notOk(offlinePacket)
       })
-      offlineStream.on('end', function () {
+      offlineStream.on('end', () => {
         instance.destroy(t.pass.bind(t, 'stop instance'))
         emitter.close(t.pass.bind(t, 'stop emitter'))
       })
@@ -110,12 +108,12 @@ test('packet ttl', function (t) {
   })
 })
 
-test('outgoingUpdate doesn\'t clear packet ttl', function (t) {
+test('outgoingUpdate doesn\'t clear packet ttl', t => {
   t.plan(5)
   db.flushall()
   const emitter = mqemitterRedis()
   const instance = persistence({
-    packetTTL: function () {
+    packetTTL () {
       return 1
     }
   })
@@ -143,7 +141,7 @@ test('outgoingUpdate doesn\'t clear packet ttl', function (t) {
     t.notOk(err)
     t.deepEqual(saved, packet)
     instance.outgoingUpdate(client, packet, function updated () {
-      setTimeout(function () {
+      setTimeout(() => {
         db.exists('packet:1:42', (_, exists) => {
           t.notOk(exists, 'packet key should have expired')
         })
@@ -154,18 +152,18 @@ test('outgoingUpdate doesn\'t clear packet ttl', function (t) {
   })
 })
 
-test('multiple persistences', function (t) {
+test('multiple persistences', t => {
   t.plan(7)
   db.flushall()
-  var emitter = mqemitterRedis()
-  var emitter2 = mqemitterRedis()
-  var instance = persistence()
-  var instance2 = persistence()
+  const emitter = mqemitterRedis()
+  const emitter2 = mqemitterRedis()
+  const instance = persistence()
+  const instance2 = persistence()
   instance.broker = toBroker('1', emitter)
   instance2.broker = toBroker('2', emitter2)
 
-  var client = { id: 'multipleTest' }
-  var subs = [{
+  const client = { id: 'multipleTest' }
+  const subs = [{
     topic: 'hello',
     qos: 1
   }, {
@@ -176,8 +174,8 @@ test('multiple persistences', function (t) {
     qos: 1
   }]
 
-  var gotSubs = false
-  var addedSubs = false
+  let gotSubs = false
+  let addedSubs = false
 
   function close () {
     if (gotSubs && addedSubs) {
@@ -188,8 +186,8 @@ test('multiple persistences', function (t) {
     }
   }
 
-  instance2._waitFor(client, 'sub_' + 'hello', function () {
-    instance2.subscriptionsByTopic('hello', function (err, resubs) {
+  instance2._waitFor(client, 'sub_' + 'hello', () => {
+    instance2.subscriptionsByTopic('hello', (err, resubs) => {
       t.notOk(err, 'subs by topic no error')
       t.deepEqual(resubs, [{
         clientId: client.id,
@@ -205,12 +203,12 @@ test('multiple persistences', function (t) {
     })
   })
 
-  var ready = false
-  var ready2 = false
+  let ready = false
+  let ready2 = false
 
   function addSubs () {
     if (ready && ready2) {
-      instance.addSubscriptions(client, subs, function (err) {
+      instance.addSubscriptions(client, subs, err => {
         t.notOk(err, 'add subs no error')
         addedSubs = true
         close()
@@ -218,28 +216,28 @@ test('multiple persistences', function (t) {
     }
   }
 
-  instance.on('ready', function () {
+  instance.on('ready', () => {
     ready = true
     addSubs()
   })
 
-  instance2.on('ready', function () {
+  instance2.on('ready', () => {
     ready2 = true
     addSubs()
   })
 })
 
-test('unknown cache key', function (t) {
+test('unknown cache key', t => {
   t.plan(3)
   db.flushall()
-  var emitter = mqemitterRedis()
-  var instance = persistence()
-  var client = { id: 'unknown_pubrec' }
+  const emitter = mqemitterRedis()
+  const instance = persistence()
+  const client = { id: 'unknown_pubrec' }
 
   instance.broker = toBroker('1', emitter)
 
   // packet with no brokerId
-  var packet = {
+  const packet = {
     cmd: 'pubrec',
     topic: 'hello',
     qos: 2,
@@ -251,12 +249,12 @@ test('unknown cache key', function (t) {
     emitter.close(t.pass.bind(t, 'emitter dies'))
   }
 
-  instance.outgoingUpdate(client, packet, function (err, client, packet) {
+  instance.outgoingUpdate(client, packet, (err, client, packet) => {
     t.equal(err.message, 'unknown key', 'Received unknown PUBREC')
     close()
   })
 })
 
-test.onFinish(function () {
+test.onFinish(() => {
   process.exit(0)
 })

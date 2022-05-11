@@ -32,7 +32,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mcollina/aedes-persistence-redis.git"
+    "url": "git+https://github.com/moscajs/aedes-persistence-redis.git"
   },
   "keywords": [
     "mqtt",
@@ -43,32 +43,30 @@
   "author": "Matteo Collina <hello@matteocollina.com>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/mcollina/aedes-persistence-redis/issues"
+    "url": "https://github.com/moscajs/aedes-persistence-redis/issues"
   },
-  "homepage": "https://github.com/mcollina/aedes-persistence-redis#readme",
+  "homepage": "https://github.com/moscajs/aedes-persistence-redis#readme",
   "devDependencies": {
-    "concat-stream": "^2.0.0",
-    "fastq": "^1.8.0",
+    "fastq": "^1.13.0",
     "faucet": "0.0.1",
     "license-checker": "^25.0.1",
-    "mqemitter": "^4.4.0",
-    "mqemitter-redis": "^4.0.3",
-    "mqtt": "^4.2.1",
+    "mqemitter": "^4.5.0",
+    "mqemitter-redis": "^5.0.0",
+    "mqtt": "^4.3.7",
     "nyc": "^15.1.0",
     "pre-commit": "^1.2.2",
-    "release-it": "^14.0.3",
+    "release-it": "^15.0.0",
     "snazzy": "^9.0.0",
-    "standard": "^14.3.4",
-    "tape": "^4.13.2"
+    "standard": "^17.0.0",
+    "tape": "^4.15.1"
   },
   "dependencies": {
-    "aedes-cached-persistence": "^8.1.0",
-    "from2": "^2.3.0",
+    "aedes-cached-persistence": "^8.1.1",
     "hashlru": "^2.3.0",
-    "ioredis": "^4.17.3",
+    "ioredis": "^5.0.4",
     "msgpack-lite": "^0.1.26",
     "pump": "^3.0.0",
-    "qlobber": "^5.0.3",
+    "qlobber": "^7.0.0",
     "through2": "^4.0.2",
     "throughv": "^1.0.4"
   }
