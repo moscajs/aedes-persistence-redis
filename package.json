@@ -58,12 +58,12 @@
     "release-it": "^15.0.0",
     "snazzy": "^9.0.0",
     "standard": "^17.0.0",
-    "tape": "^4.15.1"
+    "tape": "^5.5.3"
   },
   "dependencies": {
-    "aedes-cached-persistence": "^8.1.1",
+    "aedes-cached-persistence": "^9.0.0",
     "hashlru": "^2.3.0",
-    "ioredis": "^5.0.4",
+    "ioredis": "^5.0.5",
     "msgpack-lite": "^0.1.26",
     "pump": "^3.0.0",
     "qlobber": "^7.0.0",
