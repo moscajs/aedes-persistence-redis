@@ -267,7 +267,7 @@ class RedisPersistence extends CachedPersistence {
 
   outgoingUpdate (client, packet, cb) {
     const that = this
-    if (packet.brokerId && packet.messageId) {
+    if ('brokerId' in packet && 'messageId' in packet) {
       updateWithClientData(this, client, packet, cb)
     } else {
       augmentWithBrokerData(this, client, packet, function updateClient (err) {
@@ -280,8 +280,8 @@ class RedisPersistence extends CachedPersistence {
 
   outgoingClearMessageId (client, packet, cb) {
     const that = this
-    const clientListKey = outgoingKey + client.id
-    const messageIdKey = `${outgoingIdKey + client.id}:${packet.messageId}`
+    const clientListKey = `${outgoingKey}${client.id}`
+    const messageIdKey = `${outgoingIdKey}${client.id}:${packet.messageId}`
 
     const clientKey = this.messageIdCache.get(messageIdKey)
     this.messageIdCache.remove(messageIdKey)
@@ -624,7 +624,7 @@ function updateWithClientData (that, client, packet, cb) {
 }
 
 function augmentWithBrokerData (that, client, packet, cb) {
-  const messageIdKey = `${outgoingIdKey + client.id}:${packet.messageId}`
+  const messageIdKey = `${outgoingIdKey}${client.id}:${packet.messageId}`
 
   const key = that.messageIdCache.get(messageIdKey)
   if (!key) {
