@@ -7,7 +7,7 @@ const pump = require('pump')
 const CachedPersistence = require('aedes-cached-persistence')
 const Packet = CachedPersistence.Packet
 const HLRU = require('hashlru')
-const QlobberTrue = require('qlobber').QlobberTrue
+const { QlobberTrue } = require('qlobber')
 const qlobberOpts = {
   separator: '/',
   wildcard_one: '+',
@@ -90,7 +90,7 @@ class RedisPersistence extends CachedPersistence {
     let errored
 
     for (const sub of subs) {
-      toStore[sub.topic] = sub.qos
+      toStore[sub.topic] = JSON.stringify({ qos: sub.qos, rh: sub.rh, rap: sub.rap, nl: sub.nl })
     }
 
     this._db.sadd(clientsKey, client.id, finish)
@@ -525,9 +525,13 @@ function returnSubsForClient (subs) {
   }
 
   for (const subKey of subKeys) {
+    const sub = JSON.parse(subs[subKey])
     toReturn.push({
       topic: subKey,
-      qos: parseInt(subs[subKey])
+      qos: sub.qos,
+      rh: sub.rh,
+      rap: sub.rap,
+      nl: sub.nl
     })
   }
 
@@ -536,12 +540,15 @@ function returnSubsForClient (subs) {
 
 function processKeysForClient (clientId, clientHash, that) {
   const topics = Object.keys(clientHash)
-
   for (const topic of topics) {
+    const sub = clientHash[topic]
     that._trie.add(topic, {
       clientId,
       topic,
-      qos: clientHash[topic]
+      qos: sub.qos,
+      rh: sub.rh,
+      rap: sub.rap,
+      nl: sub.nl
     })
   }
 }
