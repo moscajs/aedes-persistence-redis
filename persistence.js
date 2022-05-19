@@ -90,11 +90,11 @@ class RedisPersistence extends CachedPersistence {
     let errored
 
     for (const sub of subs) {
-      toStore[sub.topic] = JSON.stringify({ qos: sub.qos, rh: sub.rh, rap: sub.rap, nl: sub.nl })
+      toStore[sub.topic] = msgpack.encode(sub)
     }
 
     this._db.sadd(clientsKey, client.id, finish)
-    this._db.hmset(clientSubKey, toStore, finish)
+    this._db.hmsetBuffer(clientSubKey, toStore, finish)
 
     this._addedSubscriptions(client, subs, finish)
 
@@ -163,7 +163,7 @@ class RedisPersistence extends CachedPersistence {
   subscriptionsByClient (client, cb) {
     const clientSubKey = clientKey + client.id
 
-    this._db.hgetall(clientSubKey, function returnSubs (err, subs) {
+    this._db.hgetallBuffer(clientSubKey, function returnSubs (err, subs) {
       const toReturn = returnSubsForClient(subs)
       cb(err, toReturn.length > 0 ? toReturn : null, client)
     })
@@ -525,14 +525,7 @@ function returnSubsForClient (subs) {
   }
 
   for (const subKey of subKeys) {
-    const sub = JSON.parse(subs[subKey])
-    toReturn.push({
-      topic: subKey,
-      qos: sub.qos,
-      rh: sub.rh,
-      rap: sub.rap,
-      nl: sub.nl
-    })
+    toReturn.push(msgpack.decode(subs[subKey]))
   }
 
   return toReturn
@@ -542,14 +535,8 @@ function processKeysForClient (clientId, clientHash, that) {
   const topics = Object.keys(clientHash)
   for (const topic of topics) {
     const sub = clientHash[topic]
-    that._trie.add(topic, {
-      clientId,
-      topic,
-      qos: sub.qos,
-      rh: sub.rh,
-      rap: sub.rap,
-      nl: sub.nl
-    })
+    sub.clientId = clientId
+    that._trie.add(topic, sub)
   }
 }
 
