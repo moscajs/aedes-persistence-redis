@@ -19,6 +19,10 @@ See [aedes-persistence][aedes-persistence] for the full API, and [Aedes][aedes] 
 npm install aedes aedes-persistence-redis --save
 ```
 
+## Upgrade
+
+Please check [UPGRADE.md](UPGRADE.md) when upgrading from a previous version.
+
 ## API
 
 ### aedesPersistenceRedis([opts])

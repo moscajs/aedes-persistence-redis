@@ -154,6 +154,7 @@ test('outgoingUpdate doesn\'t clear packet ttl', t => {
 
 test('multiple persistences', t => {
   t.plan(7)
+  t.timeoutAfter(60 * 1000)
   db.flushall()
   const emitter = mqemitterRedis()
   const emitter2 = mqemitterRedis()
@@ -186,18 +187,24 @@ test('multiple persistences', t => {
     }
   }
 
-  instance2._waitFor(client, 'sub_' + 'hello', () => {
+  instance2._waitFor(client, true, 'hello', () => {
     instance2.subscriptionsByTopic('hello', (err, resubs) => {
       t.notOk(err, 'subs by topic no error')
       t.deepEqual(resubs, [{
         clientId: client.id,
         topic: 'hello/#',
-        qos: 1
+        qos: 1,
+        rh: undefined,
+        rap: undefined,
+        nl: undefined
       }, {
         clientId: client.id,
         topic: 'hello',
-        qos: 1
-      }])
+        qos: 1,
+        rh: undefined,
+        rap: undefined,
+        nl: undefined
+      }], 'received correct subs')
       gotSubs = true
       close()
     })
