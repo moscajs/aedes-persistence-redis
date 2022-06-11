@@ -123,7 +123,7 @@ test('outgoingUpdate doesn\'t clear packet ttl', t => {
     id: 'ttlTest'
   }
   const subs = [{
-    clientId: client.clientId,
+    clientId: client.id,
     topic: 'hello',
     qos: 1
   }]
