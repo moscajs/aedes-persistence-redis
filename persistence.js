@@ -229,7 +229,7 @@ class RedisPersistence extends CachedPersistence {
     const that = this
 
     const hgetallStream = throughv.obj(function getStream (clientId, enc, cb) {
-      that._db.hgetall(clientSubKey(clientId), function clientHash (err, hash) {
+      that._db.hgetallBuffer(clientSubKey(clientId), function clientHash (err, hash) {
         cb(err, { clientHash: hash, clientId })
       })
     }, function emitReady (cb) {
@@ -562,7 +562,7 @@ function returnSubsForClient (subs) {
 function processKeysForClient (clientId, clientHash, that) {
   const topics = Object.keys(clientHash)
   for (const topic of topics) {
-    const sub = clientHash[topic]
+    const sub = msgpack.decode(clientHash[topic])
     sub.clientId = clientId
     that._trie.add(topic, sub)
   }
