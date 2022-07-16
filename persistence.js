@@ -424,6 +424,7 @@ class RedisPersistence extends CachedPersistence {
     const key = willKey(this.broker.id, client.id)
     packet.clientId = client.id
     packet.brokerId = this.broker.id
+    this._db.lrem(WILLSKEY, 0, key) // Remove duplicates
     this._db.rpush(WILLSKEY, key)
     this._db.setBuffer(key, msgpack.encode(packet), encodeBuffer)
 
@@ -475,7 +476,7 @@ class RedisPersistence extends CachedPersistence {
         stream.emit('error', err)
       } else {
         for (const result of results) {
-          if (!brokers || !brokers[result.split(':')[1]]) {
+          if (!brokers || !brokers[result.split(':')[1]] || brokers.length === 1) {
             stream.write(result)
           }
         }
