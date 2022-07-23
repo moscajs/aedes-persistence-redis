@@ -476,7 +476,7 @@ class RedisPersistence extends CachedPersistence {
         stream.emit('error', err)
       } else {
         for (const result of results) {
-          if (!brokers || !brokers[result.split(':')[1]] || brokers.length === 1) {
+          if (!brokers || !brokers[result.split(':')[1]]) {
             stream.write(result)
           }
         }
