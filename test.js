@@ -263,7 +263,7 @@ test('unknown cache key', t => {
 })
 
 test('wills table de-duplicate', t => {
-  t.plan(3)
+  t.plan(5)
   db.flushall()
   const emitter = mqemitterRedis()
   const instance = persistence()
@@ -283,10 +283,16 @@ test('wills table de-duplicate', t => {
   }
 
   instance.putWill(client, packet, err => {
+    t.notOk(err, 'putWill #1 no error')
     instance.putWill(client, packet, err => {
-      const key = `will:${instance.broker.id}:${encodeURIComponent(client.id)}`
-      instance._db.lrem('will', 0, key, function (err, value) {
-        t.equal(value, 1, 'should only be one will')
+      t.notOk(err, 'putWill #2 no error')
+      let willCount = 0
+      const wills = instance.streamWill()
+      wills.on('data', function (chunk) {
+        willCount++
+      })
+      wills.on('end', function () {
+        t.equal(willCount, 1, 'should only be one will')
         close()
       })
     })
@@ -296,7 +302,6 @@ test('wills table de-duplicate', t => {
     instance.destroy(t.pass.bind(t, 'instance dies'))
     emitter.close(t.pass.bind(t, 'emitter dies'))
   }
-
 })
 
 test.onFinish(() => {
