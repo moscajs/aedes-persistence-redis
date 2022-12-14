@@ -554,7 +554,14 @@ function returnSubsForClient (subs) {
   }
 
   for (const subKey of subKeys) {
-    toReturn.push(msgpack.decode(subs[subKey]))
+    if (subs[subKey].length === 1) { // version 8x fallback, QoS saved not encoded object
+      toReturn.push({
+        topic: subKey,
+        qos: parseInt(subs[subKey])
+      })
+    } else {
+      toReturn.push(msgpack.decode(subs[subKey]))
+    }
   }
 
   return toReturn
