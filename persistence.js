@@ -261,7 +261,7 @@ class RedisPersistence extends CachedPersistence {
       return cb(null, packet)
     }
     let count = 0
-    let outstanding = 1
+    let outstanding = 2
     let errored = false
     const pktKey = packetKey(packet.brokerId, packet.brokerCounter)
     const countKey = packetCountKey(packet.brokerId, packet.brokerCounter)
@@ -269,7 +269,9 @@ class RedisPersistence extends CachedPersistence {
 
     const encoded = msgpack.encode(new Packet(packet))
 
-    this._db.mset(pktKey, encoded, countKey, subs.length, finish)
+    this._db.set(pktKey, encoded, finish)
+    this._db.set(countKey, subs.length, finish)
+
     if (ttl > 0) {
       outstanding += 2
       this._db.expire(pktKey, ttl, finish)
@@ -354,7 +356,8 @@ class RedisPersistence extends CachedPersistence {
           return cb(err)
         }
         if (remained === 0) {
-          that._db.del(pktKey, countKey, finish)
+          that._db.del(pktKey, finish)
+          that._db.del(countKey, finish)
         } else {
           finish()
         }
@@ -366,7 +369,7 @@ class RedisPersistence extends CachedPersistence {
           errored = err
           return cb(err)
         }
-        if (count === 3 && !errored) {
+        if (count === 4 && !errored) {
           cb(err, origPacket)
         }
       }

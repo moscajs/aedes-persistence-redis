@@ -1,0 +1,98 @@
+version: '3'
+
+services:
+  redis-1:
+    image: redis:6.2.5-alpine
+    command: redis-server --port 6379 --cluster-enabled yes --cluster-config-file /data/nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-1-data:/var/lib/redis
+    networks:
+      redis-cluster:
+        ipv4_address: 172.20.0.2
+
+  redis-2:
+    image: redis:6.2.5-alpine
+    command: redis-server --port 6380 --cluster-enabled yes --cluster-config-file /data/nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    ports:
+      - "6380:6380"
+    volumes:
+      - redis-2-data:/var/lib/redis
+    networks:
+      redis-cluster:
+        ipv4_address: 172.20.0.3
+
+  redis-3:
+    image: redis:6.2.5-alpine
+    command: redis-server --port 6381 --cluster-enabled yes --cluster-config-file /data/nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    ports:
+      - "6381:6381"
+    volumes:
+      - redis-3-data:/var/lib/redis
+    networks:
+      redis-cluster:
+        ipv4_address: 172.20.0.4
+
+  redis-4:
+    image: redis:6.2.5-alpine
+    command: redis-server --port 6382 --cluster-enabled yes --cluster-config-file /data/nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    ports:
+      - "6382:6382"
+    volumes:
+      - redis-4-data:/var/lib/redis
+    networks:
+      redis-cluster:
+        ipv4_address: 172.20.0.5
+
+  redis-5:
+    image: redis:6.2.5-alpine
+    command: redis-server --port 6383 --cluster-enabled yes --cluster-config-file /data/nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    ports:
+      - "6383:6383"
+    volumes:
+      - redis-5-data:/var/lib/redis
+    networks:
+      redis-cluster:
+        ipv4_address: 172.20.0.6
+
+  redis-6:
+    image: redis:6.2.5-alpine
+    command: redis-server --port 6384 --cluster-enabled yes --cluster-config-file /data/nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    ports:
+      - "6384:6384"
+    volumes:
+      - redis-6-data:/var/lib/redis
+    networks:
+      redis-cluster:
+        ipv4_address: 172.20.0.7
+
+  redis-trib:
+    image: redis:6.2.5-alpine
+    command: redis-cli --cluster create 172.20.0.2:6379 172.20.0.3:6380 172.20.0.4:6381 172.20.0.5:6382 172.20.0.6:6383 172.20.0.7:6384 --cluster-replicas 1 --cluster-yes
+    depends_on:
+      - redis-1
+      - redis-2
+      - redis-3
+      - redis-4
+      - redis-5
+      - redis-6
+    networks:
+      redis-cluster:
+        ipv4_address: 172.20.0.30
+
+volumes:
+  redis-1-data:
+  redis-2-data:
+  redis-3-data:
+  redis-4-data:
+  redis-5-data:
+  redis-6-data:
+
+networks:
+  redis-cluster:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/24
