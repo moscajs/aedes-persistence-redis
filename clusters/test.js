@@ -23,8 +23,6 @@ db.on('error', e => {
   console.trace(e)
 })
 
-db.on('connect', unref)
-
 db.on('ready', function () {
   abs({
     test,
