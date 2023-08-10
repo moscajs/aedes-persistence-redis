@@ -62,7 +62,8 @@ aedesPersistenceRedis({
   }, {
     port: 6380,
     host: '127.0.0.1'
-  }])
+  }]),
+  cluster: true
 })
 ```
 

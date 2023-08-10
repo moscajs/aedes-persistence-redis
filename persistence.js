@@ -74,6 +74,7 @@ class RedisPersistence extends CachedPersistence {
       this._db = opts.conn || new Redis(opts)
     }
 
+    this.hasClusters = !!opts.cluster
     this._getRetainedChunkBound = this._getRetainedChunk.bind(this)
   }
 
@@ -265,7 +266,7 @@ class RedisPersistence extends CachedPersistence {
       return cb(null, packet)
     }
     let count = 0
-    let outstanding = 2
+    let outstanding = 1
     let errored = false
     const pktKey = packetKey(packet.brokerId, packet.brokerCounter)
     const countKey = packetCountKey(packet.brokerId, packet.brokerCounter)
@@ -273,9 +274,14 @@ class RedisPersistence extends CachedPersistence {
 
     const encoded = msgpack.encode(new Packet(packet))
 
-    // do not do this using `mset`, fails in clusters
-    this._db.set(pktKey, encoded, finish)
-    this._db.set(countKey, subs.length, finish)
+    if (this.hasClusters) {
+      // do not do this using `mset`, fails in clusters
+      outstanding += 1
+      this._db.set(pktKey, encoded, finish)
+      this._db.set(countKey, subs.length, finish)
+    } else {
+      this._db.mset(pktKey, encoded, countKey, subs.length, finish)
+    }
 
     if (ttl > 0) {
       outstanding += 2
@@ -326,6 +332,7 @@ class RedisPersistence extends CachedPersistence {
     }
 
     let count = 0
+    let expected = 3
     let errored = false
 
     // TODO can be cached in case of wildcard deliveries
@@ -361,9 +368,14 @@ class RedisPersistence extends CachedPersistence {
           return cb(err)
         }
         if (remained === 0) {
-          // do not remove multiple keys at once, fails in clusters
-          that._db.del(pktKey, finish)
-          that._db.del(countKey, finish)
+          if (that.hasClusters) {
+            expected++
+            // do not remove multiple keys at once, fails in clusters
+            that._db.del(pktKey, finish)
+            that._db.del(countKey, finish)
+          } else {
+            that._db.del(pktKey, countKey, finish)
+          }
         } else {
           finish()
         }
@@ -375,7 +387,7 @@ class RedisPersistence extends CachedPersistence {
           errored = err
           return cb(err)
         }
-        if (count === 4 && !errored) {
+        if (count === expected && !errored) {
           cb(err, origPacket)
         }
       }

@@ -3,9 +3,9 @@ version: '3'
 services:
   redis-1:
     image: redis:6.2.5-alpine
-    command: redis-server --port 6379 --cluster-enabled yes --cluster-config-file /data/nodes.conf --cluster-node-timeout 5000 --appendonly yes
+    command: redis-server --port 6378 --cluster-enabled yes --cluster-config-file /data/nodes.conf --cluster-node-timeout 5000 --appendonly yes
     ports:
-      - "6379:6379"
+      - "6378:6378"
     volumes:
       - redis-1-data:/var/lib/redis
     networks:
@@ -69,7 +69,7 @@ services:
 
   redis-trib:
     image: redis:6.2.5-alpine
-    command: redis-cli --cluster create 172.20.0.2:6379 172.20.0.3:6380 172.20.0.4:6381 172.20.0.5:6382 172.20.0.6:6383 172.20.0.7:6384 --cluster-replicas 1 --cluster-yes
+    command: redis-cli --cluster create 172.20.0.2:6378 172.20.0.3:6380 172.20.0.4:6381 172.20.0.5:6382 172.20.0.6:6383 172.20.0.7:6384 --cluster-replicas 1 --cluster-yes
     depends_on:
       - redis-1
       - redis-2

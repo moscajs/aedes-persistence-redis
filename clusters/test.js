@@ -9,7 +9,7 @@ function unref () {
 }
 
 const nodes = [
-  { host: 'localhost', port: 6379 },
+  { host: 'localhost', port: 6378 },
   { host: 'localhost', port: 6380 },
   { host: 'localhost', port: 6381 },
   { host: 'localhost', port: 6382 },
@@ -37,7 +37,7 @@ db.on('ready', function () {
         })
       })).then(() => {
         cb(null, persistence({
-          conn: new Redis.Cluster(nodes)
+          cluster: new Redis.Cluster(nodes)
         }))
       })
     },
