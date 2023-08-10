@@ -19,6 +19,12 @@ const nodes = [
 
 const db = new Redis.Cluster(nodes)
 
+db.on('error', e => {
+  console.trace(e)
+})
+
+db.on('connect', unref)
+
 db.on('ready', function () {
   abs({
     test,
