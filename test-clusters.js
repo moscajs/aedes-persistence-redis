@@ -4,7 +4,7 @@ const Redis = require('ioredis')
 const mqemitterRedis = require('mqemitter-redis')
 const abs = require('aedes-cached-persistence/abstract')
 
-function unref() {
+function unref () {
   this.connector.stream.unref()
 }
 
@@ -26,14 +26,14 @@ db.on('error', e => {
 db.on('ready', function () {
   abs({
     test,
-    buildEmitter() {
+    buildEmitter () {
       const emitter = mqemitterRedis()
       emitter.subConn.on('connect', unref)
       emitter.pubConn.on('connect', unref)
 
       return emitter
     },
-    persistence(cb) {
+    persistence (cb) {
       const slaves = db.nodes('master')
       Promise.all(slaves.map(function (node) {
         return node.flushdb().catch(err => {

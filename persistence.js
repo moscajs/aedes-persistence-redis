@@ -117,7 +117,18 @@ class RedisPersistence extends CachedPersistence {
   }
 
   _getRetainedKeysCluster (cb) {
-    this._db.keys(ALL_RETAINEDKEYS, cb)
+    // Get keys of all the masters:
+    const masters = this._db.nodes('master')
+    Promise.all(
+      masters
+        .map((node) => node.keys(ALL_RETAINEDKEYS))
+    ).then((keys) => {
+      // keys: [['key1', 'key2'], ['key3', 'key4']]
+      // flatten the array
+      cb(null, keys.reduce((acc, val) => acc.concat(val), []))
+    }).catch((err) => {
+      cb(err)
+    })
   }
 
   _getRetainedKeys (cb) {
