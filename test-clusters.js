@@ -1,5 +1,5 @@
 const test = require('tape').test
-const persistence = require('../persistence')
+const persistence = require('./persistence')
 const Redis = require('ioredis')
 const mqemitterRedis = require('mqemitter-redis')
 const abs = require('aedes-cached-persistence/abstract')
