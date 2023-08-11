@@ -41,7 +41,7 @@ db.on('ready', function () {
         })
       })).then(() => {
         cb(null, persistence({
-          cluster: new Redis.Cluster(nodes)
+          cluster: nodes
         }))
       })
     },
