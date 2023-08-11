@@ -9,17 +9,14 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-            redis:
-                image: redis
-                ports:
-                  - 6379:6379
-                options: --entrypoint redis-server
     strategy:
       matrix:
         node-version: [14.x, 16.x, 18.x]
 
     steps:
+      - name: Start Redis
+        working-directory: ./docker
+        run:  docker-compose up -d
       - uses: actions/checkout@v3
 
       - name: Use Node.js
@@ -32,31 +29,6 @@ jobs:
       - name: Run tests
         run: |
           npm run test
-
-  test-clusters:
-    runs-on: ubuntu-latest
-    services:
-      redis:
-          image: redis
-          ports:
-            - 6379:6379
-          options: --entrypoint redis-server
-    strategy:
-      matrix:
-        node-version: [14.x, 16.x, 18.x]
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Use Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: ${{ matrix.node-version }}
-      - name: Install
+      - name: Run tests - clusters
         run: |
-          npm install
-      - name: Run tests
-        working-directory: ./clusters
-        run: |
-          docker-compose up -d
-          node test.js
+          node test-clusters.js
