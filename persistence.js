@@ -69,7 +69,7 @@ class RedisPersistence extends CachedPersistence {
 
     this.messageIdCache = HLRU(100000)
 
-    if (opts.cluster) {
+    if (opts.cluster && Array.isArray(opts.cluster)) {
       this._db = new Redis.Cluster(opts.cluster)
     } else {
       this._db = opts.conn || new Redis(opts)

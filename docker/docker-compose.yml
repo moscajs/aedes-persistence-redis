@@ -16,7 +16,7 @@ services:
       - '6383:7004'
       - '6384:7005'
     environment:
-    #  SENTINEL: 'true'
+      SENTINEL: 'true'
       INITIAL_PORT: 7000,
       MASTERS: 3,
       SLAVES_PER_MASTER: 1
