@@ -19,6 +19,7 @@ const CLIENTSKEY = 'clients'
 const WILLSKEY = 'will'
 const WILLKEY = 'will:'
 const RETAINEDKEY = 'retained'
+const ALL_RETAINEDKEYS = `${RETAINEDKEY}:*`
 const OUTGOINGKEY = 'outgoing:'
 const OUTGOINGIDKEY = 'outgoing-id:'
 const INCOMINGKEY = 'incoming:'
@@ -52,6 +53,10 @@ function packetKey (brokerId, brokerCounter) {
   return `${PACKETKEY}${brokerId}:${brokerCounter}`
 }
 
+function retainedKey (topic) {
+  return `${RETAINEDKEY}:${encodeURIComponent(topic)}`
+}
+
 function packetCountKey (brokerId, brokerCounter) {
   return `${PACKETKEY}${brokerId}:${brokerCounter}:offlineCount`
 }
@@ -64,16 +69,30 @@ class RedisPersistence extends CachedPersistence {
 
     this.messageIdCache = HLRU(100000)
 
-    if (opts.cluster) {
+    if (opts.cluster && Array.isArray(opts.cluster)) {
       this._db = new Redis.Cluster(opts.cluster)
     } else {
       this._db = opts.conn || new Redis(opts)
     }
 
-    this._getRetainedChunkBound = this._getRetainedChunk.bind(this)
+    this.hasClusters = !!opts.cluster
+    this._getRetainedChunkBound = (this.hasClusters ? this._getRetainedChunkCluster : this._getRetainedChunk).bind(this)
+    this._getRetainedKeysBound = (this.hasClusters ? this._getRetainedKeysCluster : this._getRetainedKeys).bind(this)
   }
 
-  storeRetained (packet, cb) {
+  /**
+   * When using clusters we store it using a compound key instead of an hash
+   * to spread the load across the clusters. See issue #85.
+   */
+  _storeRetainedCluster (packet, cb) {
+    if (packet.payload.length === 0) {
+      this._db.del(retainedKey(packet.topic), cb)
+    } else {
+      this._db.set(retainedKey(packet.topic), msgpack.encode(packet), cb)
+    }
+  }
+
+  _storeRetained (packet, cb) {
     if (packet.payload.length === 0) {
       this._db.hdel(RETAINEDKEY, packet.topic, cb)
     } else {
@@ -81,8 +100,39 @@ class RedisPersistence extends CachedPersistence {
     }
   }
 
-  _getRetainedChunk (chunk, enc, cb) {
-    this._db.hgetBuffer(RETAINEDKEY, chunk, cb)
+  storeRetained (packet, cb) {
+    if (this.hasClusters) {
+      this._storeRetainedCluster(packet, cb)
+    } else {
+      this._storeRetained(packet, cb)
+    }
+  }
+
+  _getRetainedChunkCluster (topic, enc, cb) {
+    this._db.getBuffer(retainedKey(topic), cb)
+  }
+
+  _getRetainedChunk (topic, enc, cb) {
+    this._db.hgetBuffer(RETAINEDKEY, topic, cb)
+  }
+
+  _getRetainedKeysCluster (cb) {
+    // Get keys of all the masters:
+    const masters = this._db.nodes('master')
+    Promise.all(
+      masters
+        .map((node) => node.keys(ALL_RETAINEDKEYS))
+    ).then((keys) => {
+      // keys: [['key1', 'key2'], ['key3', 'key4']]
+      // flatten the array
+      cb(null, keys.reduce((acc, val) => acc.concat(val), []))
+    }).catch((err) => {
+      cb(err)
+    })
+  }
+
+  _getRetainedKeys (cb) {
+    this._db.hkeys(RETAINEDKEY, cb)
   }
 
   createRetainedStreamCombi (patterns) {
@@ -95,11 +145,11 @@ class RedisPersistence extends CachedPersistence {
 
     const stream = through.obj(that._getRetainedChunkBound)
 
-    this._db.hkeys(RETAINEDKEY, function getKeys (err, keys) {
+    this._getRetainedKeysBound(function getKeys (err, keys) {
       if (err) {
         stream.emit('error', err)
       } else {
-        matchRetained(stream, keys, qlobber)
+        matchRetained(stream, keys, qlobber, that.hasClusters)
       }
     })
 
@@ -269,7 +319,15 @@ class RedisPersistence extends CachedPersistence {
 
     const encoded = msgpack.encode(new Packet(packet))
 
-    this._db.mset(pktKey, encoded, countKey, subs.length, finish)
+    if (this.hasClusters) {
+      // do not do this using `mset`, fails in clusters
+      outstanding += 1
+      this._db.set(pktKey, encoded, finish)
+      this._db.set(countKey, subs.length, finish)
+    } else {
+      this._db.mset(pktKey, encoded, countKey, subs.length, finish)
+    }
+
     if (ttl > 0) {
       outstanding += 2
       this._db.expire(pktKey, ttl, finish)
@@ -319,6 +377,7 @@ class RedisPersistence extends CachedPersistence {
     }
 
     let count = 0
+    let expected = 3
     let errored = false
 
     // TODO can be cached in case of wildcard deliveries
@@ -354,7 +413,14 @@ class RedisPersistence extends CachedPersistence {
           return cb(err)
         }
         if (remained === 0) {
-          that._db.del(pktKey, countKey, finish)
+          if (that.hasClusters) {
+            expected++
+            // do not remove multiple keys at once, fails in clusters
+            that._db.del(pktKey, finish)
+            that._db.del(countKey, finish)
+          } else {
+            that._db.del(pktKey, countKey, finish)
+          }
         } else {
           finish()
         }
@@ -366,7 +432,7 @@ class RedisPersistence extends CachedPersistence {
           errored = err
           return cb(err)
         }
-        if (count === 3 && !errored) {
+        if (count === expected && !errored) {
           cb(err, origPacket)
         }
       }
@@ -525,10 +591,11 @@ class RedisPersistence extends CachedPersistence {
   }
 }
 
-function matchRetained (stream, keys, qlobber) {
-  for (const key of keys) {
-    if (qlobber.test(key)) {
-      stream.write(key)
+function matchRetained (stream, topics, qlobber, hasClusters) {
+  for (let t of topics) {
+    t = hasClusters ? decodeURIComponent(t.split(':')[1]) : t
+    if (qlobber.test(t)) {
+      stream.write(t)
     }
   }
   stream.end()

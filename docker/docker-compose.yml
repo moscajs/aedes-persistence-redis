@@ -1,0 +1,22 @@
+version: '3'
+
+services:
+  redis-default:
+    image: redis:6.2.5-alpine
+    command: redis-server --port 6379 --appendonly yes
+    network_mode: "host"
+
+  redis-cluster:
+    image: gsccheng/redis-cluster
+    ports:
+      - '6378:7000'
+      - '6380:7001'
+      - '6381:7002'
+      - '6382:7003'
+      - '6383:7004'
+      - '6384:7005'
+    environment:
+      SENTINEL: 'true'
+      INITIAL_PORT: 7000,
+      MASTERS: 3,
+      SLAVES_PER_MASTER: 1
