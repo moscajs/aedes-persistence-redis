@@ -515,7 +515,7 @@ class RedisPersistence extends CachedPersistence {
   }
 
   delWill (client, cb) {
-    const key = willKey(client.brokerId, client.id)
+    const key = willKey(this.broker.id, client.id)
     let result = null
     const that = this
     this._db.lrem(WILLSKEY, 0, key)
