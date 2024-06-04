@@ -304,6 +304,38 @@ test('wills table de-duplicate', t => {
   }
 })
 
+test('wills get deleted', t => {
+  t.plan(1)
+  db.flushall()
+  const emitter = mqemitterRedis()
+  const instance = persistence()
+  const client = { id: 'delWillTest' }
+
+  instance.broker = toBroker('1', emitter)
+
+  const packet = {
+    cmd: 'publish',
+    topic: 'hello',
+    payload: 'delWillTest',
+    qos: 1,
+    retain: false,
+    brokerId: instance.broker.id,
+    brokerCounter: 42,
+    messageId: 123
+  }
+
+  instance.putWill(client, packet, err => {
+    t.error(err, 'no error')
+    instance.delWill(client, err => {
+      t.error(err, 'no error')
+      instance.getWill(client, (err, result) => {
+        t.error(err, 'no error')
+        t.false(result, 'will was not deleted')
+      })
+    })
+  })
+})
+
 test.onFinish(() => {
   process.exit(0)
 })
