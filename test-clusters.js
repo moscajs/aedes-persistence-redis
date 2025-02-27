@@ -66,4 +66,4 @@ db.on('ready', () => {
   })
 })
 
-sleep(10).then(() => process.exit())
+sleep(10).then(() => process.exit(0))
