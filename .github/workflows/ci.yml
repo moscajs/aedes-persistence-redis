@@ -11,17 +11,17 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [14.x, 16.x, 18.x]
+        node-version: ['lts/-1', 'lts/*', 'node']
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Start Redis
         working-directory: ./docker
-        run:  docker-compose up -d
+        run:  docker compose up -d
 
       - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install
@@ -32,4 +32,4 @@ jobs:
           npm run test
       - name: Run tests - clusters
         run: |
-          node test-clusters.js
+          npm run test:clusters
