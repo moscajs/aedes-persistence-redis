@@ -1,5 +1,5 @@
 const Redis = require('ioredis')
-const { Readable } = require('stream')
+const { Readable } = require('node:stream')
 const through = require('through2')
 const throughv = require('throughv')
 const msgpack = require('msgpack-lite')
@@ -256,7 +256,7 @@ class RedisPersistence extends CachedPersistence {
         return cb(err)
       }
 
-      cb(null, that._trie.subscriptionsCount, parseInt(count) || 0)
+      cb(null, that._trie.subscriptionsCount, Number.parseInt(count) || 0)
     })
   }
 
@@ -624,7 +624,7 @@ function returnSubsForClient (subs) {
     if (subs[subKey].length === 1) { // version 8x fallback, QoS saved not encoded object
       toReturn.push({
         topic: subKey,
-        qos: parseInt(subs[subKey])
+        qos: Number.parseInt(subs[subKey])
       })
     } else {
       toReturn.push(msgpack.decode(subs[subKey]))
@@ -653,9 +653,8 @@ function updateWithClientData (that, client, packet, cb) {
     that.messageIdCache.set(messageIdKey, pktKey)
     if (ttl > 0) {
       return that._db.set(pktKey, msgpack.encode(packet), 'EX', ttl, updatePacket)
-    } else {
-      return that._db.set(pktKey, msgpack.encode(packet), updatePacket)
     }
+    return that._db.set(pktKey, msgpack.encode(packet), updatePacket)
   }
 
   // qos=2

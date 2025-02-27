@@ -1,4 +1,5 @@
-const test = require('tape').test
+const test = require('node:test')
+const assert = require('node:assert/strict')
 const persistence = require('./')
 const Redis = require('ioredis')
 const mqemitterRedis = require('mqemitter-redis')
@@ -16,17 +17,15 @@ function unref () {
 }
 
 test('external Redis conn', t => {
-  t.plan(2)
-
   const externalRedis = new Redis()
   const emitter = mqemitterRedis()
 
   db.on('error', e => {
-    t.notOk(e)
+    assert.ifError(e)
   })
 
   db.on('connect', () => {
-    t.pass('redis connected')
+    t.diagnostic('redis connected')
   })
   const instance = persistence({
     conn: externalRedis
@@ -35,7 +34,7 @@ test('external Redis conn', t => {
   instance.broker = toBroker('1', emitter)
 
   instance.on('ready', () => {
-    t.pass('instance ready')
+    t.diagnostic('instance ready')
     externalRedis.disconnect()
     instance.destroy()
     emitter.close()
@@ -68,7 +67,6 @@ function toBroker (id, emitter) {
 }
 
 test('packet ttl', t => {
-  t.plan(4)
   db.flushall()
   const emitter = mqemitterRedis()
   const instance = persistence({
@@ -93,23 +91,22 @@ test('packet ttl', t => {
     brokerCounter: 42
   }
   instance.outgoingEnqueueCombi(subs, packet, function enqueued (err, saved) {
-    t.notOk(err)
-    t.deepEqual(saved, packet)
+    assert.ifError(err)
+    assert.deepEqual(saved, packet)
     setTimeout(() => {
       const offlineStream = instance.outgoingStream({ id: 'ttlTest' })
       offlineStream.on('data', offlinePacket => {
-        t.notOk(offlinePacket)
+        assert.ok(!offlinePacket)
       })
       offlineStream.on('end', () => {
-        instance.destroy(t.pass.bind(t, 'stop instance'))
-        emitter.close(t.pass.bind(t, 'stop emitter'))
+        instance.destroy()
+        emitter.close()
       })
     }, 1100)
   })
 })
 
 test('outgoingUpdate doesn\'t clear packet ttl', t => {
-  t.plan(5)
   db.flushall()
   const emitter = mqemitterRedis()
   const instance = persistence({
@@ -138,12 +135,12 @@ test('outgoingUpdate doesn\'t clear packet ttl', t => {
     messageId: 123
   }
   instance.outgoingEnqueueCombi(subs, packet, function enqueued (err, saved) {
-    t.notOk(err)
-    t.deepEqual(saved, packet)
+    assert.ifError(err)
+    assert.deepEqual(saved, packet)
     instance.outgoingUpdate(client, packet, function updated () {
       setTimeout(() => {
         db.exists('packet:1:42', (_, exists) => {
-          t.notOk(exists, 'packet key should have expired')
+          assert.ok(!exists, 'packet key should have expired')
         })
         instance.destroy(t.pass.bind(t, 'instance dies'))
         emitter.close(t.pass.bind(t, 'emitter dies'))
@@ -152,9 +149,9 @@ test('outgoingUpdate doesn\'t clear packet ttl', t => {
   })
 })
 
-test('multiple persistences', t => {
-  t.plan(7)
-  t.timeoutAfter(60 * 1000)
+test('multiple persistences', {
+  timeout: 60 * 1000
+}, t => {
   db.flushall()
   const emitter = mqemitterRedis()
   const emitter2 = mqemitterRedis()
@@ -189,8 +186,8 @@ test('multiple persistences', t => {
 
   instance2._waitFor(client, true, 'hello', () => {
     instance2.subscriptionsByTopic('hello', (err, resubs) => {
-      t.notOk(err, 'subs by topic no error')
-      t.deepEqual(resubs, [{
+      assert.ok(!err, 'subs by topic no error')
+      assert.deepEqual(resubs, [{
         clientId: client.id,
         topic: 'hello/#',
         qos: 1,
@@ -216,7 +213,7 @@ test('multiple persistences', t => {
   function addSubs () {
     if (ready && ready2) {
       instance.addSubscriptions(client, subs, err => {
-        t.notOk(err, 'add subs no error')
+        assert.ok(!err, 'add subs no error')
         addedSubs = true
         close()
       })
@@ -235,7 +232,6 @@ test('multiple persistences', t => {
 })
 
 test('unknown cache key', t => {
-  t.plan(3)
   db.flushall()
   const emitter = mqemitterRedis()
   const instance = persistence()
@@ -252,18 +248,17 @@ test('unknown cache key', t => {
   }
 
   function close () {
-    instance.destroy(t.pass.bind(t, 'instance dies'))
-    emitter.close(t.pass.bind(t, 'emitter dies'))
+    instance.destroy()
+    emitter.close()
   }
 
   instance.outgoingUpdate(client, packet, (err, client, packet) => {
-    t.equal(err.message, 'unknown key', 'Received unknown PUBREC')
+    assert.equal(err.message, 'unknown key', 'Received unknown PUBREC')
     close()
   })
 })
 
 test('wills table de-duplicate', t => {
-  t.plan(5)
   db.flushall()
   const emitter = mqemitterRedis()
   const instance = persistence()
@@ -283,27 +278,26 @@ test('wills table de-duplicate', t => {
   }
 
   instance.putWill(client, packet, err => {
-    t.notOk(err, 'putWill #1 no error')
+    assert.ok(!err, 'putWill #1 no error')
     instance.putWill(client, packet, err => {
-      t.notOk(err, 'putWill #2 no error')
+      assert.ok(!err, 'putWill #2 no error')
       let willCount = 0
       const wills = instance.streamWill()
-      wills.on('data', function (chunk) {
+      wills.on('data', (chunk) => {
         willCount++
       })
-      wills.on('end', function () {
-        t.equal(willCount, 1, 'should only be one will')
+      wills.on('end', () => {
+        assert.equal(willCount, 1, 'should only be one will')
         close()
       })
     })
   })
 
   function close () {
-    instance.destroy(t.pass.bind(t, 'instance dies'))
-    emitter.close(t.pass.bind(t, 'emitter dies'))
+    instance.destroy()
+    emitter.close()
   }
 })
 
-test.onFinish(() => {
-  process.exit(0)
-})
+// clients will keep on running after the test
+setImmediate(() => process.exit(0))

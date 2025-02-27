@@ -1,4 +1,3 @@
-// npm install mqtt fastq
 // command to run : node fastbench 25000
 const queue = require('fastq')(worker, 1)
 const mqtt = require('mqtt')
