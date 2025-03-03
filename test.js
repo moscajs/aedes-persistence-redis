@@ -83,7 +83,7 @@ abs({
 })
 
 test('packet ttl', async t => {
-  t.plan(2)
+  t.plan(3)
   // the promise is required for the test to wait for the end event
   const executeTest = new Promise((resolve, reject) => {
     db.flushall()
@@ -114,13 +114,11 @@ test('packet ttl', async t => {
       t.assert.deepEqual(saved, packet)
       await sleep(1)
       const offlineStream = instance.outgoingStream({ id: 'ttlTest' })
-      offlineStream.on('data', offlinePacket => {
+      for await (const offlinePacket of offlineStream) {
         t.assert.ok(!offlinePacket)
-      })
-      offlineStream.on('end', () => {
-        cleanUpPersistence(t, p)
-        resolve()
-      })
+      }
+      cleanUpPersistence(t, p)
+      resolve()
     })
   })
   await executeTest

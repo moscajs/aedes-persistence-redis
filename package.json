@@ -68,9 +68,6 @@
     "hashlru": "^2.3.0",
     "ioredis": "^5.5.0",
     "msgpack-lite": "^0.1.26",
-    "pump": "^3.0.2",
-    "qlobber": "^8.0.1",
-    "through2": "^4.0.2",
-    "throughv": "^1.0.4"
+    "qlobber": "^8.0.1"
   }
 }
