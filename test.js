@@ -1,44 +1,69 @@
 const test = require('node:test')
-const assert = require('node:assert/strict')
 const persistence = require('./')
 const Redis = require('ioredis')
 const mqemitterRedis = require('mqemitter-redis')
 const abs = require('aedes-cached-persistence/abstract')
-const db = new Redis()
 
-db.on('error', e => {
-  console.trace(e)
-})
+function sleep (sec) {
+  return new Promise(resolve => setTimeout(resolve, sec * 1000))
+}
 
-db.on('connect', unref)
+function waitForEvent (obj, resolveEvt) {
+  return new Promise((resolve, reject) => {
+    obj.on(resolveEvt, () => {
+      resolve()
+    })
+    obj.on('error', reject)
+  })
+}
 
+function setUpPersistence (t, id, persistenceOpts) {
+  const emitter = mqemitterRedis()
+  const instance = persistence(persistenceOpts)
+  instance.broker = toBroker(id, emitter)
+  t.diagnostic(`instance ${id} created`)
+  return { instance, emitter, id }
+}
+
+function cleanUpPersistence (t, { instance, emitter, id }) {
+  instance.destroy()
+  emitter.close()
+  t.diagnostic(`instance ${id} destroyed`)
+}
+
+function toBroker (id, emitter) {
+  return {
+    id,
+    publish: emitter.emit.bind(emitter),
+    subscribe: emitter.on.bind(emitter),
+    unsubscribe: emitter.removeListener.bind(emitter)
+  }
+}
 function unref () {
   this.connector.stream.unref()
 }
 
-test('external Redis conn', t => {
+// testing starts here
+const db = new Redis()
+db.on('error', e => {
+  console.trace(e)
+})
+db.on('connect', unref)
+
+test('external Redis conn', async t => {
+  t.plan(2)
   const externalRedis = new Redis()
-  const emitter = mqemitterRedis()
-
-  db.on('error', e => {
-    assert.ifError(e)
-  })
-
-  db.on('connect', () => {
-    t.diagnostic('redis connected')
-  })
-  const instance = persistence({
+  await waitForEvent(externalRedis, 'connect')
+  t.diagnostic('redis connected')
+  t.assert.ok(true, 'redis connected')
+  const p = setUpPersistence(t, '1', {
     conn: externalRedis
   })
-
-  instance.broker = toBroker('1', emitter)
-
-  instance.on('ready', () => {
-    t.diagnostic('instance ready')
-    externalRedis.disconnect()
-    instance.destroy()
-    emitter.close()
-  })
+  await waitForEvent(p.instance, 'ready')
+  t.assert.ok(true, 'instance ready')
+  t.diagnostic('instance ready')
+  externalRedis.disconnect()
+  cleanUpPersistence(t, p)
 })
 
 abs({
@@ -50,71 +75,66 @@ abs({
 
     return emitter
   },
-  persistence () {
+  persistence: () => {
     db.flushall()
     return persistence()
   },
   waitForReady: true
 })
 
-function toBroker (id, emitter) {
-  return {
-    id,
-    publish: emitter.emit.bind(emitter),
-    subscribe: emitter.on.bind(emitter),
-    unsubscribe: emitter.removeListener.bind(emitter)
-  }
-}
+test('packet ttl', async t => {
+  t.plan(2)
+  // the promise is required for the test to wait for the end event
+  const executeTest = new Promise((resolve, reject) => {
+    db.flushall()
 
-test('packet ttl', t => {
-  db.flushall()
-  const emitter = mqemitterRedis()
-  const instance = persistence({
-    packetTTL () {
-      return 1
+    const p = setUpPersistence(t, '1', {
+      packetTTL () {
+        return 1
+      }
+    })
+    const instance = p.instance
+
+    const subs = [{
+      clientId: 'ttlTest',
+      topic: 'hello',
+      qos: 1
+    }]
+    const packet = {
+      cmd: 'publish',
+      topic: 'hello',
+      payload: 'ttl test',
+      qos: 1,
+      retain: false,
+      brokerId: instance.broker.id,
+      brokerCounter: 42
     }
-  })
-  instance.broker = toBroker('1', emitter)
-
-  const subs = [{
-    clientId: 'ttlTest',
-    topic: 'hello',
-    qos: 1
-  }]
-  const packet = {
-    cmd: 'publish',
-    topic: 'hello',
-    payload: 'ttl test',
-    qos: 1,
-    retain: false,
-    brokerId: instance.broker.id,
-    brokerCounter: 42
-  }
-  instance.outgoingEnqueueCombi(subs, packet, function enqueued (err, saved) {
-    assert.ifError(err)
-    assert.deepEqual(saved, packet)
-    setTimeout(() => {
+    instance.outgoingEnqueueCombi(subs, packet, async function enqueued (err, saved) {
+      t.assert.ifError(err)
+      t.assert.deepEqual(saved, packet)
+      await sleep(1)
       const offlineStream = instance.outgoingStream({ id: 'ttlTest' })
       offlineStream.on('data', offlinePacket => {
-        assert.ok(!offlinePacket)
+        t.assert.ok(!offlinePacket)
       })
       offlineStream.on('end', () => {
-        instance.destroy()
-        emitter.close()
+        cleanUpPersistence(t, p)
+        resolve()
       })
-    }, 1100)
+    })
   })
+  await executeTest
 })
 
-test('outgoingUpdate doesn\'t clear packet ttl', t => {
+test('outgoingUpdate doesn\'t clear packet ttl', async t => {
+  t.plan(3)
   db.flushall()
-  const emitter = mqemitterRedis()
-  const instance = persistence({
+  const p = setUpPersistence(t, '1', {
     packetTTL () {
       return 1
     }
   })
-  instance.broker = toBroker('1', emitter)
+  const instance = p.instance
 
   const client = {
     id: 'ttlTest'
@@ -134,170 +154,172 @@ test('outgoingUpdate doesn\'t clear packet ttl', t => {
     brokerCounter: 42,
     messageId: 123
   }
-  instance.outgoingEnqueueCombi(subs, packet, function enqueued (err, saved) {
-    assert.ifError(err)
-    assert.deepEqual(saved, packet)
-    instance.outgoingUpdate(client, packet, function updated () {
-      setTimeout(() => {
+
+  await new Promise((resolve, reject) => {
+    instance.outgoingEnqueueCombi(subs, packet, function enqueued (err, saved) {
+      t.assert.ifError(err)
+      t.assert.deepEqual(saved, packet)
+      instance.outgoingUpdate(client, packet, async function updated () {
+        await sleep(2)
         db.exists('packet:1:42', (_, exists) => {
-          assert.ok(!exists, 'packet key should have expired')
+          t.assert.ok(!exists, 'packet key should have expired')
+          cleanUpPersistence(t, p)
+          resolve()
         })
-        instance.destroy(t.pass.bind(t, 'instance dies'))
-        emitter.close(t.pass.bind(t, 'emitter dies'))
-      }, 1100)
+      })
     })
   })
 })
 
 test('multiple persistences', {
   timeout: 60 * 1000
-}, t => {
-  db.flushall()
-  const emitter = mqemitterRedis()
-  const emitter2 = mqemitterRedis()
-  const instance = persistence()
-  const instance2 = persistence()
-  instance.broker = toBroker('1', emitter)
-  instance2.broker = toBroker('2', emitter2)
+}, async t => {
+  t.plan(3)
+  const executeTest = new Promise((resolve, reject) => {
+    db.flushall()
+    const p1 = setUpPersistence(t, '1')
+    const p2 = setUpPersistence(t, '2')
+    const instance = p1.instance
+    const instance2 = p2.instance
 
-  const client = { id: 'multipleTest' }
-  const subs = [{
-    topic: 'hello',
-    qos: 1
-  }, {
-    topic: 'hello/#',
-    qos: 1
-  }, {
-    topic: 'matteo',
-    qos: 1
-  }]
+    const client = { id: 'multipleTest' }
+    const subs = [{
+      topic: 'hello',
+      qos: 1
+    }, {
+      topic: 'hello/#',
+      qos: 1
+    }, {
+      topic: 'matteo',
+      qos: 1
+    }]
 
-  let gotSubs = false
-  let addedSubs = false
+    let gotSubs = false
+    let addedSubs = false
 
-  function close () {
-    if (gotSubs && addedSubs) {
-      instance.destroy(t.pass.bind(t, 'first dies'))
-      instance2.destroy(t.pass.bind(t, 'second dies'))
-      emitter.close(t.pass.bind(t, 'first emitter dies'))
-      emitter2.close(t.pass.bind(t, 'second emitter dies'))
+    function close () {
+      if (gotSubs && addedSubs) {
+        cleanUpPersistence(t, p1)
+        cleanUpPersistence(t, p2)
+        resolve()
+      }
     }
-  }
 
-  instance2._waitFor(client, true, 'hello', () => {
-    instance2.subscriptionsByTopic('hello', (err, resubs) => {
-      assert.ok(!err, 'subs by topic no error')
-      assert.deepEqual(resubs, [{
-        clientId: client.id,
-        topic: 'hello/#',
-        qos: 1,
-        rh: undefined,
-        rap: undefined,
-        nl: undefined
-      }, {
-        clientId: client.id,
-        topic: 'hello',
-        qos: 1,
-        rh: undefined,
-        rap: undefined,
-        nl: undefined
-      }], 'received correct subs')
-      gotSubs = true
-      close()
-    })
-  })
-
-  let ready = false
-  let ready2 = false
-
-  function addSubs () {
-    if (ready && ready2) {
-      instance.addSubscriptions(client, subs, err => {
-        assert.ok(!err, 'add subs no error')
-        addedSubs = true
+    instance2._waitFor(client, true, 'hello', () => {
+      instance2.subscriptionsByTopic('hello', (err, resubs) => {
+        t.assert.ok(!err, 'subs by topic no error')
+        t.assert.deepEqual(resubs, [{
+          clientId: client.id,
+          topic: 'hello/#',
+          qos: 1,
+          rh: undefined,
+          rap: undefined,
+          nl: undefined
+        }, {
+          clientId: client.id,
+          topic: 'hello',
+          qos: 1,
+          rh: undefined,
+          rap: undefined,
+          nl: undefined
+        }], 'received correct subs')
+        gotSubs = true
         close()
       })
+    })
+
+    let ready = false
+    let ready2 = false
+
+    function addSubs () {
+      if (ready && ready2) {
+        instance.addSubscriptions(client, subs, err => {
+          t.assert.ok(!err, 'add subs no error')
+          addedSubs = true
+          close()
+        })
+      }
     }
-  }
 
-  instance.on('ready', () => {
-    ready = true
-    addSubs()
-  })
+    instance.on('ready', () => {
+      ready = true
+      addSubs()
+    })
 
-  instance2.on('ready', () => {
-    ready2 = true
-    addSubs()
+    instance2.on('ready', () => {
+      ready2 = true
+      addSubs()
+    })
   })
+  await executeTest
 })
 
-test('unknown cache key', t => {
-  db.flushall()
-  const emitter = mqemitterRedis()
-  const instance = persistence()
-  const client = { id: 'unknown_pubrec' }
+test('unknown cache key', async t => {
+  t.plan(2)
+  const executeTest = new Promise((resolve, reject) => {
+    db.flushall()
+    const p = setUpPersistence(t, '1')
+    const instance = p.instance
+    const client = { id: 'unknown_pubrec' }
 
-  instance.broker = toBroker('1', emitter)
+    // packet with no brokerId
+    const packet = {
+      cmd: 'pubrec',
+      topic: 'hello',
+      qos: 2,
+      retain: false
+    }
 
-  // packet with no brokerId
-  const packet = {
-    cmd: 'pubrec',
-    topic: 'hello',
-    qos: 2,
-    retain: false
-  }
-
-  function close () {
-    instance.destroy()
-    emitter.close()
-  }
-
-  instance.outgoingUpdate(client, packet, (err, client, packet) => {
-    assert.equal(err.message, 'unknown key', 'Received unknown PUBREC')
-    close()
+    instance.on('ready', () => {
+      instance.outgoingUpdate(client, packet, (err, client, packet) => {
+        t.assert.ok(err, 'error received')
+        t.assert.equal(err.message, 'unknown key', 'Received unknown PUBREC')
+        cleanUpPersistence(t, p)
+        resolve()
+      })
+    })
   })
+  await executeTest
 })
 
-test('wills table de-duplicate', t => {
-  db.flushall()
-  const emitter = mqemitterRedis()
-  const instance = persistence()
-  const client = { id: 'willsTest' }
+test('wills table de-duplicate', async t => {
+  t.plan(3)
+  const executeTest = new Promise((resolve, reject) => {
+    db.flushall()
+    const p = setUpPersistence(t, '1')
+    const instance = p.instance
+    const client = { id: 'willsTest' }
 
-  instance.broker = toBroker('1', emitter)
+    const packet = {
+      cmd: 'publish',
+      topic: 'hello',
+      payload: 'willsTest',
+      qos: 1,
+      retain: false,
+      brokerId: instance.broker.id,
+      brokerCounter: 42,
+      messageId: 123
+    }
 
-  const packet = {
-    cmd: 'publish',
-    topic: 'hello',
-    payload: 'willsTest',
-    qos: 1,
-    retain: false,
-    brokerId: instance.broker.id,
-    brokerCounter: 42,
-    messageId: 123
-  }
-
-  instance.putWill(client, packet, err => {
-    assert.ok(!err, 'putWill #1 no error')
     instance.putWill(client, packet, err => {
-      assert.ok(!err, 'putWill #2 no error')
-      let willCount = 0
-      const wills = instance.streamWill()
-      wills.on('data', (chunk) => {
-        willCount++
-      })
-      wills.on('end', () => {
-        assert.equal(willCount, 1, 'should only be one will')
-        close()
+      t.assert.ok(!err, 'putWill #1 no error')
+      instance.putWill(client, packet, err => {
+        t.assert.ok(!err, 'putWill #2 no error')
+        let willCount = 0
+        const wills = instance.streamWill()
+        wills.on('data', (chunk) => {
+          willCount++
+        })
+        wills.on('end', () => {
+          t.assert.equal(willCount, 1, 'should only be one will')
+          cleanUpPersistence(t, p)
+          resolve()
+        })
       })
     })
   })
-
-  function close () {
-    instance.destroy()
-    emitter.close()
-  }
+  await executeTest
 })
 
 // clients will keep on running after the test
-setImmediate(() => process.exit(0))
+sleep(10).then(() => process.exit(0))
