@@ -10,10 +10,10 @@ function sleep (sec) {
 
 function waitForEvent (obj, resolveEvt) {
   return new Promise((resolve, reject) => {
-    obj.on(resolveEvt, () => {
+    obj.once(resolveEvt, () => {
       resolve()
     })
-    obj.on('error', reject)
+    obj.once('error', reject)
   })
 }
 
