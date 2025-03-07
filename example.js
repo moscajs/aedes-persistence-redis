@@ -4,6 +4,6 @@ const aedes = require('aedes')({
   mq,
   persistence
 })
-const server = require('net').createServer(aedes.handle)
+const server = require('node:net').createServer(aedes.handle)
 
 server.listen(1883)

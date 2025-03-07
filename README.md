@@ -1,8 +1,6 @@
 # aedes-persistence-redis
 
 ![.github/workflows/ci.yml](https://github.com/moscajs/aedes-persistence-redis/workflows/.github/workflows/ci.yml/badge.svg)
-[![Dependencies Status](https://david-dm.org/moscajs/aedes-persistence-redis/status.svg)](https://david-dm.org/moscajs/aedes-persistence-redis)
-[![devDependencies Status](https://david-dm.org/moscajs/aedes-persistence-redis/dev-status.svg)](https://david-dm.org/moscajs/aedes-persistence-redis?type=dev)
 \
 [![Known Vulnerabilities](https://snyk.io/test/github/moscajs/aedes-persistence-redis/badge.svg)](https://snyk.io/test/github/moscajs/aedes-persistence-redis)
 [![Coverage Status](https://coveralls.io/repos/moscajs/aedes-persistence-redis/badge.svg?branch=master&service=github)](https://coveralls.io/github/moscajs/aedes-persistence-redis?branch=master)

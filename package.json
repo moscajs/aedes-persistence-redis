@@ -3,12 +3,19 @@
   "version": "10.0.0",
   "description": "Aedes persistence, backed by redis",
   "main": "persistence.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "lint": "standard --verbose | snazzy",
-    "test": "tape test.js | faucet",
-    "coverage": "nyc --reporter=lcov tape test.js",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "unit": "node --test test.js",
+    "test": "npm run lint && npm run unit",
+    "test:clusters": "node --test test-clusters.js",
+    "coverage": "nyc --reporter=lcov node --test test.js",
     "license-checker": "license-checker --production --onlyAllow='MIT;ISC;BSD-3-Clause;BSD-2-Clause;Apache-2.0;Apache*'",
-    "release": "read -p 'GITHUB_TOKEN: ' GITHUB_TOKEN && export GITHUB_TOKEN=$GITHUB_TOKEN && release-it --disable-metrics"
+    "release": "read -p 'GITHUB_TOKEN: ' GITHUB_TOKEN && export GITHUB_TOKEN=$GITHUB_TOKEN && release-it --disable-metrics",
+    "redis": "cd docker;docker compose up"
   },
   "release-it": {
     "github": {
@@ -27,7 +34,6 @@
     }
   },
   "pre-commit": [
-    "lint",
     "test"
   ],
   "repository": {
@@ -47,27 +53,21 @@
   },
   "homepage": "https://github.com/moscajs/aedes-persistence-redis#readme",
   "devDependencies": {
-    "fastq": "^1.13.0",
-    "faucet": "0.0.1",
+    "@fastify/pre-commit": "^2.2.0",
+    "eslint": "^9.21.0",
+    "fastq": "^1.19.1",
     "license-checker": "^25.0.1",
-    "mqemitter": "^4.5.0",
-    "mqemitter-redis": "^5.0.0",
-    "mqtt": "^4.3.7",
-    "nyc": "^15.1.0",
-    "pre-commit": "^1.2.2",
-    "release-it": "^15.0.0",
-    "snazzy": "^9.0.0",
-    "standard": "^17.0.0",
-    "tape": "^5.5.3"
+    "mqemitter-redis": "^6.1.0",
+    "mqtt": "^5.10.4",
+    "neostandard": "^0.12.1",
+    "nyc": "^17.1.0",
+    "release-it": "^18.1.2"
   },
   "dependencies": {
-    "aedes-cached-persistence": "^9.0.0",
+    "aedes-cached-persistence": "^10.0.0",
     "hashlru": "^2.3.0",
-    "ioredis": "^5.0.5",
+    "ioredis": "^5.5.0",
     "msgpack-lite": "^0.1.26",
-    "pump": "^3.0.0",
-    "qlobber": "^7.0.0",
-    "through2": "^4.0.2",
-    "throughv": "^1.0.4"
+    "qlobber": "^8.0.1"
   }
 }

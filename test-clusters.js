@@ -1,4 +1,4 @@
-const test = require('tape').test
+const test = require('node:test')
 const persistence = require('./persistence')
 const Redis = require('ioredis')
 const mqemitterRedis = require('mqemitter-redis')
@@ -6,6 +6,10 @@ const abs = require('aedes-cached-persistence/abstract')
 
 function unref () {
   this.connector.stream.unref()
+}
+
+function sleep (sec) {
+  return new Promise(resolve => setTimeout(resolve, sec * 1000))
 }
 
 const nodes = [
@@ -23,41 +27,43 @@ db.on('error', e => {
   console.trace(e)
 })
 
-db.on('ready', function () {
+function buildEmitter () {
+  const emitter = mqemitterRedis()
+  emitter.subConn.on('connect', unref)
+  emitter.pubConn.on('connect', unref)
+
+  return emitter
+}
+
+function clusterPersistence (cb) {
+  const slaves = db.nodes('master')
+  Promise.all(slaves.map((node) => {
+    return node.flushdb().catch(err => {
+      console.error('flushRedisKeys-error:', err)
+    })
+  })).then(() => {
+    const conn = new Redis.Cluster(nodes)
+
+    conn.on('error', e => {
+      console.trace(e)
+    })
+
+    conn.on('ready', () => {
+      cb(null, persistence({
+        conn,
+        cluster: true
+      }))
+    })
+  })
+}
+
+db.on('ready', () => {
   abs({
     test,
-    buildEmitter () {
-      const emitter = mqemitterRedis()
-      emitter.subConn.on('connect', unref)
-      emitter.pubConn.on('connect', unref)
-
-      return emitter
-    },
-    persistence (cb) {
-      const slaves = db.nodes('master')
-      Promise.all(slaves.map(function (node) {
-        return node.flushdb().catch(err => {
-          console.error('flushRedisKeys-error:', err)
-        })
-      })).then(() => {
-        const conn = new Redis.Cluster(nodes)
-
-        conn.on('error', e => {
-          console.trace(e)
-        })
-
-        conn.on('ready', function () {
-          cb(null, persistence({
-            conn,
-            cluster: true
-          }))
-        })
-      })
-    },
+    buildEmitter,
+    persistence: clusterPersistence,
     waitForReady: true
   })
-
-  test.onFinish(() => {
-    process.exit(0)
-  })
 })
+
+sleep(10).then(() => process.exit(0))
