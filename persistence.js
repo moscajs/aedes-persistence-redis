@@ -105,13 +105,14 @@ class RedisPersistence extends CachedPersistence {
 
     this.messageIdCache = HLRU(100000)
 
-    if (opts.cluster && Array.isArray(opts.cluster)) {
+    const hasClusters = opts.cluster && Array.isArray(opts.cluster)
+    this.hasClusters = hasClusters
+
+    if (hasClusters) {
       this._db = new Redis.Cluster(opts.cluster)
     } else {
       this._db = opts.conn || new Redis(opts)
     }
-
-    this.hasClusters = !!opts.cluster
   }
 
   /**
@@ -148,7 +149,7 @@ class RedisPersistence extends CachedPersistence {
     for (const pattern of patterns) {
       qlobber.add(pattern)
     }
-    return Readable.from(matchRetained(this.db, qlobber, this.hasClusters))
+    return Readable.from(matchRetained(this._db, qlobber, this.hasClusters))
   }
 
   createRetainedStream (pattern) {
@@ -552,8 +553,8 @@ class RedisPersistence extends CachedPersistence {
   }
 }
 
-function * matchRetained (db, qlobber, hasClusters) {
-  for (const key of getRetainedKeys(db, hasClusters)) {
+async function * matchRetained (db, qlobber, hasClusters) {
+  for (const key of await getRetainedKeys(db, hasClusters)) {
     const topic = hasClusters ? decodeURIComponent(key.split(':')[1]) : key
     if (qlobber.test(topic)) {
       yield getRetainedValue(db, topic, hasClusters)
