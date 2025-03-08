@@ -148,6 +148,7 @@ class RedisPersistence extends CachedPersistence {
     for (const pattern of patterns) {
       qlobber.add(pattern)
     }
+
     return Readable.from(matchRetained(this._db, qlobber, this.hasClusters))
   }
 
@@ -683,3 +684,7 @@ function augmentWithBrokerData (that, client, packet, cb) {
 }
 
 module.exports = (opts) => new RedisPersistence(opts)
+module.exports.forTesting = {
+  qlobberOpts,
+  matchRetained
+}
