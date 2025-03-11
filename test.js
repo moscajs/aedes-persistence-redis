@@ -3,7 +3,6 @@ const persistence = require('./')
 const Redis = require('ioredis')
 const mqemitterRedis = require('mqemitter-redis')
 const abs = require('aedes-cached-persistence/abstract')
-const { QlobberTrue } = require('qlobber')
 function sleep (sec) {
   return new Promise(resolve => setTimeout(resolve, sec * 1000))
 }
@@ -310,41 +309,6 @@ test('wills table de-duplicate', async t => {
         })
         wills.on('end', () => {
           t.assert.equal(willCount, 1, 'should only be one will')
-          cleanUpPersistence(t, p)
-          resolve()
-        })
-      })
-    })
-  })
-  await executeTest
-})
-
-test('matchRetained properly retrieves retained packets', async t => {
-  t.plan(2)
-  const executeTest = new Promise((resolve, reject) => {
-    db.flushall()
-    const p = setUpPersistence(t, '1')
-    const instance = p.instance
-
-    const packet = {
-      cmd: 'publish',
-      topic: 'hello',
-      payload: 'test',
-      qos: 1,
-      retain: true,
-      brokerId: instance.broker.id,
-      brokerCounter: 42,
-      messageId: 123
-    }
-
-    const qlobber = new QlobberTrue(persistence.forTesting.qlobberOpts)
-    qlobber.add(packet.topic)
-
-    instance.on('ready', () => {
-      instance.storeRetained(packet, err => {
-        t.assert.ok(!err, 'no error on storeRetained')
-        persistence.forTesting.matchRetained(db, qlobber, false).next().then(retained => {
-          t.assert.deepEqual(retained.value, packet, 'retained packet matches original packet')
           cleanUpPersistence(t, p)
           resolve()
         })

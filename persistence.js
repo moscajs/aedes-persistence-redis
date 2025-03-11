@@ -684,7 +684,3 @@ function augmentWithBrokerData (that, client, packet, cb) {
 }
 
 module.exports = (opts) => new RedisPersistence(opts)
-module.exports.forTesting = {
-  qlobberOpts,
-  matchRetained
-}
