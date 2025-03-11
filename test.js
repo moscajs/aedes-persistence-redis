@@ -3,6 +3,7 @@ const persistence = require('./')
 const Redis = require('ioredis')
 const mqemitterRedis = require('mqemitter-redis')
 const abs = require('aedes-cached-persistence/abstract')
+
 function sleep (sec) {
   return new Promise(resolve => setTimeout(resolve, sec * 1000))
 }
