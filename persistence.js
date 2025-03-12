@@ -90,7 +90,7 @@ async function * createWillStream (db, brokers, maxWills) {
   const results = await db.lrange(WILLSKEY, 0, maxWills)
   for (const key of results) {
     const result = await getDecodedValue(db, WILLSKEY, key)
-    if (!brokers || !brokers[result.split(':')[1]]) {
+    if (!brokers || !brokers[key.split(':')[1]]) {
       yield result
     }
   }
