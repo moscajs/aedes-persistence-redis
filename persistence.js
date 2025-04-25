@@ -72,9 +72,9 @@ async function getRetainedKeys (db, hasClusters) {
     // Get keys of all the masters
     const masters = db.nodes('master')
     const keys = await Promise.all(
-      masters.flatMap((node) => node.keys(ALL_RETAINEDKEYS))
+      masters.map((node) => node.keys(ALL_RETAINEDKEYS))
     )
-    return keys
+    return keys.flat()
   }
   return await db.hkeys(RETAINEDKEY)
 }
@@ -554,7 +554,8 @@ class RedisPersistence extends CachedPersistence {
 }
 
 async function * matchRetained (db, qlobber, hasClusters) {
-  for (const key of await getRetainedKeys(db, hasClusters)) {
+  const keys = await getRetainedKeys(db, hasClusters)
+  for (const key of keys) {
     const topic = hasClusters ? decodeURIComponent(key.split(':')[1]) : key
     if (qlobber.test(topic)) {
       yield getRetainedValue(db, topic, hasClusters)
