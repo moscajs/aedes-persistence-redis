@@ -96,7 +96,7 @@ async function doTest () {
       instance.outgoingEnqueueCombi(subs, packet, async function enqueued (err, saved) {
         t.assert.ifError(err)
         t.assert.deepEqual(saved, packet)
-        await sleep(1)
+        await sleep(5)
         const offlineStream = instance.outgoingStream({ id: 'ttlTest' })
         for await (const offlinePacket of offlineStream) {
           t.assert.ok(!offlinePacket)
