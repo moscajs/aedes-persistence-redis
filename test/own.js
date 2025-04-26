@@ -80,10 +80,13 @@ function waitForEvent (obj, resolveEvt) {
   })
 }
 
-function setUpPersistence (t, id, persistenceOpts) {
+async function setUpPersistence (t, id, persistenceOpts) {
   const emitter = mqemitterRedis()
   const instance = persistence(persistenceOpts)
   instance.broker = toBroker(id, emitter)
+  if (!instance.ready) {
+    await waitForEvent(instance, 'ready')
+  }
   t.diagnostic(`instance ${id} created`)
   return { instance, emitter, id }
 }
@@ -120,13 +123,11 @@ async function doTest () {
   test('external Redis conn', async t => {
     t.plan(1)
     const conn = await createDB(t)
-    const p = setUpPersistence(t, '1', {
+    const p = await setUpPersistence(t, '1', {
       conn
     })
-    await waitForEvent(p.instance, 'ready')
-    t.assert.ok(true, 'instance ready')
-    t.diagnostic('instance ready')
     conn.disconnect()
+    t.assert.ok(true, 'redis disconnected')
     t.diagnostic('redis disconnected')
     cleanUpPersistence(t, p)
   })
@@ -135,7 +136,7 @@ async function doTest () {
     t.plan(1)
     await cleanDB()
 
-    const p = setUpPersistence(t, '1', {
+    const p = await setUpPersistence(t, '1', {
       packetTTL () {
         return 1
       }
@@ -166,7 +167,7 @@ async function doTest () {
   test('outgoingUpdate doesn\'t clear packet ttl', async t => {
     t.plan(1)
     const db = await createDB()
-    const p = setUpPersistence(t, '1', {
+    const p = await setUpPersistence(t, '1', {
       packetTTL () {
         return 1
       }
@@ -204,8 +205,8 @@ async function doTest () {
   test('multiple persistences', async t => {
     t.plan(1)
     await cleanDB()
-    const p1 = setUpPersistence(t, '1')
-    const p2 = setUpPersistence(t, '2')
+    const p1 = await setUpPersistence(t, '1')
+    const p2 = await setUpPersistence(t, '2')
     const instance = p1.instance
     const instance2 = p2.instance
 
@@ -250,7 +251,7 @@ async function doTest () {
     t.plan(2)
     await cleanDB()
 
-    const p = setUpPersistence(t, '1')
+    const p = await setUpPersistence(t, '1')
     const instance = p.instance
     const client = { id: 'unknown_pubrec' }
 
@@ -275,7 +276,7 @@ async function doTest () {
     t.plan(1)
     await cleanDB()
 
-    const p = setUpPersistence(t, '1')
+    const p = await setUpPersistence(t, '1')
     const instance = p.instance
     const client = { id: 'willsTest' }
 
