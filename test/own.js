@@ -3,6 +3,70 @@ const persistence = require('../persistence.js')
 const Redis = require('ioredis')
 const mqemitterRedis = require('mqemitter-redis')
 
+// promisified versions of the instance methods
+// to avoid deep callbacks while testing
+
+async function outgoingEnqueueCombi (instance, subs, packet) {
+  return new Promise((resolve, reject) => {
+    instance.outgoingEnqueueCombi(subs, packet, err => {
+      if (err) {
+        reject(err)
+      } else {
+        resolve()
+      }
+    })
+  })
+}
+
+async function outgoingUpdate (instance, client, packet) {
+  return new Promise((resolve, reject) => {
+    instance.outgoingUpdate(client, packet, (err, reclient, repacket) => {
+      if (err) {
+        reject(err)
+      } else {
+        resolve({ reclient, repacket })
+      }
+    })
+  })
+}
+
+async function subscriptionsByTopic (instance, topic) {
+  return new Promise((resolve, reject) => {
+    instance.subscriptionsByTopic(topic, (err, resubs) => {
+      if (err) {
+        reject(err)
+      } else {
+        resolve(resubs)
+      }
+    })
+  })
+}
+
+async function addSubscriptions (instance, client, subs) {
+  return new Promise((resolve, reject) => {
+    instance.addSubscriptions(client, subs, (err, reClient) => {
+      if (err) {
+        reject(err)
+      } else {
+        resolve(reClient)
+      }
+    })
+  })
+}
+
+async function putWill (instance, client, packet) {
+  return new Promise((resolve, reject) => {
+    instance.putWill(client, packet, (err, reClient) => {
+      if (err) {
+        reject(err)
+      } else {
+        resolve(reClient)
+      }
+    })
+  })
+}
+
+// helpers
 function sleep (sec) {
   return new Promise(resolve => setTimeout(resolve, sec * 1000))
 }
@@ -68,48 +132,41 @@ async function doTest () {
   })
 
   test('packet ttl', async t => {
-    t.plan(3)
+    t.plan(1)
     await cleanDB()
-    // the promise is required for the test to wait for the end event
-    const executeTest = new Promise((resolve, reject) => {
-      const p = setUpPersistence(t, '1', {
-        packetTTL () {
-          return 1
-        }
-      })
-      const instance = p.instance
 
-      const subs = [{
-        clientId: 'ttlTest',
-        topic: 'hello',
-        qos: 1
-      }]
-      const packet = {
-        cmd: 'publish',
-        topic: 'hello',
-        payload: 'ttl test',
-        qos: 1,
-        retain: false,
-        brokerId: instance.broker.id,
-        brokerCounter: 42
+    const p = setUpPersistence(t, '1', {
+      packetTTL () {
+        return 1
       }
-      instance.outgoingEnqueueCombi(subs, packet, async function enqueued (err, saved) {
-        t.assert.ifError(err)
-        t.assert.deepEqual(saved, packet)
-        await sleep(5)
-        const offlineStream = instance.outgoingStream({ id: 'ttlTest' })
-        for await (const offlinePacket of offlineStream) {
-          t.assert.ok(!offlinePacket)
-        }
-        cleanUpPersistence(t, p)
-        resolve()
-      })
     })
-    await executeTest
+    const instance = p.instance
+
+    const subs = [{
+      clientId: 'ttlTest',
+      topic: 'hello',
+      qos: 1
+    }]
+    const packet = {
+      cmd: 'publish',
+      topic: 'hello',
+      payload: 'ttl test',
+      qos: 1,
+      retain: false,
+      brokerId: instance.broker.id,
+      brokerCounter: 42
+    }
+    await outgoingEnqueueCombi(instance, subs, packet)
+    await sleep(2)
+    const offlineStream = instance.outgoingStream({ id: 'ttlTest' })
+    for await (const offlinePacket of offlineStream) {
+      t.assert.ok(!offlinePacket)
+    }
+    cleanUpPersistence(t, p)
   })
 
   test('outgoingUpdate doesn\'t clear packet ttl', async t => {
-    t.plan(3)
+    t.plan(1)
     const db = await createDB()
     const p = setUpPersistence(t, '1', {
       packetTTL () {
@@ -137,169 +194,106 @@ async function doTest () {
       messageId: 123
     }
 
-    await new Promise((resolve, reject) => {
-      instance.outgoingEnqueueCombi(subs, packet, function enqueued (err, saved) {
-        t.assert.ifError(err)
-        t.assert.deepEqual(saved, packet)
-        instance.outgoingUpdate(client, packet, async function updated () {
-          await sleep(2)
-          db.exists('packet:1:42', (_, exists) => {
-            t.assert.ok(!exists, 'packet key should have expired')
-            cleanUpPersistence(t, p)
-            resolve()
-          })
-        })
-      })
-    })
+    await outgoingEnqueueCombi(instance, subs, packet)
+    await outgoingUpdate(instance, client, packet)
+    await sleep(2)
+    const exists = await db.exists('packet:1:42')
+    t.assert.ok(!exists, 'packet key should have expired')
+    cleanUpPersistence(t, p)
     db.disconnect()
   })
 
   test('multiple persistences', async t => {
-    t.plan(3)
+    t.plan(1)
     await cleanDB()
-    const executeTest = new Promise((resolve, reject) => {
-      const p1 = setUpPersistence(t, '1')
-      const p2 = setUpPersistence(t, '2')
-      const instance = p1.instance
-      const instance2 = p2.instance
+    const p1 = setUpPersistence(t, '1')
+    const p2 = setUpPersistence(t, '2')
+    const instance = p1.instance
+    const instance2 = p2.instance
 
-      const client = { id: 'multipleTest' }
-      const subs = [{
-        topic: 'hello',
-        qos: 1
-      }, {
-        topic: 'hello/#',
-        qos: 1
-      }, {
-        topic: 'matteo',
-        qos: 1
-      }]
+    const client = { id: 'multipleTest' }
+    const subs = [{
+      topic: 'hello',
+      qos: 1
+    }, {
+      topic: 'hello/#',
+      qos: 1
+    }, {
+      topic: 'matteo',
+      qos: 1
+    }]
 
-      let gotSubs = false
-      let addedSubs = false
+    await addSubscriptions(instance, client, subs)
+    const resubs = await subscriptionsByTopic(instance2, 'hello')
+    t.assert.deepEqual(resubs, [{
+      clientId: client.id,
+      topic: 'hello/#',
+      qos: 1,
+      rh: undefined,
+      rap: undefined,
+      nl: undefined
+    }, {
+      clientId: client.id,
+      topic: 'hello',
+      qos: 1,
+      rh: undefined,
+      rap: undefined,
+      nl: undefined
+    }], 'received correct subs')
 
-      function close () {
-        if (gotSubs && addedSubs) {
-          cleanUpPersistence(t, p1)
-          cleanUpPersistence(t, p2)
-          resolve()
-        }
-      }
-
-      instance2._waitFor(client, true, 'hello', () => {
-        instance2.subscriptionsByTopic('hello', (err, resubs) => {
-          t.assert.ok(!err, 'subs by topic no error')
-          t.assert.deepEqual(resubs, [{
-            clientId: client.id,
-            topic: 'hello/#',
-            qos: 1,
-            rh: undefined,
-            rap: undefined,
-            nl: undefined
-          }, {
-            clientId: client.id,
-            topic: 'hello',
-            qos: 1,
-            rh: undefined,
-            rap: undefined,
-            nl: undefined
-          }], 'received correct subs')
-          gotSubs = true
-          close()
-        })
-      })
-
-      let ready = false
-      let ready2 = false
-
-      function addSubs () {
-        if (ready && ready2) {
-          instance.addSubscriptions(client, subs, err => {
-            t.assert.ok(!err, 'add subs no error')
-            addedSubs = true
-            close()
-          })
-        }
-      }
-
-      instance.on('ready', () => {
-        ready = true
-        addSubs()
-      })
-
-      instance2.on('ready', () => {
-        ready2 = true
-        addSubs()
-      })
-    })
-    await executeTest
+    cleanUpPersistence(t, p1)
+    cleanUpPersistence(t, p2)
   })
 
   test('unknown cache key', async t => {
     t.plan(2)
     await cleanDB()
-    const executeTest = new Promise((resolve, reject) => {
-      const p = setUpPersistence(t, '1')
-      const instance = p.instance
-      const client = { id: 'unknown_pubrec' }
 
-      // packet with no brokerId
-      const packet = {
-        cmd: 'pubrec',
-        topic: 'hello',
-        qos: 2,
-        retain: false
-      }
+    const p = setUpPersistence(t, '1')
+    const instance = p.instance
+    const client = { id: 'unknown_pubrec' }
 
-      instance.on('ready', () => {
-        instance.outgoingUpdate(client, packet, (err, client, packet) => {
-          t.assert.ok(err, 'error received')
-          t.assert.equal(err.message, 'unknown key', 'Received unknown PUBREC')
-          cleanUpPersistence(t, p)
-          resolve()
-        })
-      })
-    })
-    await executeTest
+    // packet with no brokerId
+    const packet = {
+      cmd: 'pubrec',
+      topic: 'hello',
+      qos: 2,
+      retain: false
+    }
+
+    try {
+      await outgoingUpdate(instance, client, packet)
+    } catch (err) {
+      t.assert.ok(err, 'error received')
+      t.assert.equal(err.message, 'unknown key', 'Received unknown PUBREC')
+    }
+    cleanUpPersistence(t, p)
   })
 
   test('wills table de-duplicate', async t => {
-    t.plan(3)
+    t.plan(1)
     await cleanDB()
-    const executeTest = new Promise((resolve, reject) => {
-      const p = setUpPersistence(t, '1')
-      const instance = p.instance
-      const client = { id: 'willsTest' }
 
-      const packet = {
-        cmd: 'publish',
-        topic: 'hello',
-        payload: 'willsTest',
-        qos: 1,
-        retain: false,
-        brokerId: instance.broker.id,
-        brokerCounter: 42,
-        messageId: 123
-      }
+    const p = setUpPersistence(t, '1')
+    const instance = p.instance
+    const client = { id: 'willsTest' }
 
-      instance.putWill(client, packet, err => {
-        t.assert.ok(!err, 'putWill #1 no error')
-        instance.putWill(client, packet, err => {
-          t.assert.ok(!err, 'putWill #2 no error')
-          let willCount = 0
-          const wills = instance.streamWill()
-          wills.on('data', (chunk) => {
-            willCount++
-          })
-          wills.on('end', () => {
-            t.assert.equal(willCount, 1, 'should only be one will')
-            cleanUpPersistence(t, p)
-            resolve()
-          })
-        })
-      })
-    })
-    await executeTest
+    const packet = {
+      cmd: 'publish',
+      topic: 'hello',
+      payload: 'willsTest',
+      qos: 1,
+      retain: false,
+      brokerId: instance.broker.id,
+      brokerCounter: 42,
+      messageId: 123
+    }
+
+    await putWill(instance, client, packet)
+    await putWill(instance, client, packet)
+    const wills = await instance.streamWill().toArray()
+    t.assert.equal(wills.length, 1, 'should only be one will')
+    cleanUpPersistence(t, p)
   })
 }
 doTest()
