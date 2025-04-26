@@ -158,10 +158,8 @@ async function doTest () {
     }
     await outgoingEnqueueCombi(instance, subs, packet)
     await sleep(2)
-    const offlineStream = instance.outgoingStream({ id: 'ttlTest' })
-    for await (const offlinePacket of offlineStream) {
-      t.assert.ok(!offlinePacket)
-    }
+    const packets = await instance.outgoingStream({ id: 'ttlTest' }).toArray()
+    t.assert.deepEqual(packets, [null], 'packet is gone')
     cleanUpPersistence(t, p)
   })
 
@@ -223,9 +221,7 @@ async function doTest () {
       qos: 1
     }]
 
-    await addSubscriptions(instance, client, subs)
-    const resubs = await subscriptionsByTopic(instance2, 'hello')
-    t.assert.deepEqual(resubs, [{
+    const expected = [{
       clientId: client.id,
       topic: 'hello/#',
       qos: 1,
@@ -239,7 +235,12 @@ async function doTest () {
       rh: undefined,
       rap: undefined,
       nl: undefined
-    }], 'received correct subs')
+    }]
+
+    await addSubscriptions(instance, client, subs)
+    await sleep(2)
+    const resubs = await subscriptionsByTopic(instance2, 'hello')
+    t.assert.deepEqual(resubs, expected, 'received correct subs')
 
     cleanUpPersistence(t, p1)
     cleanUpPersistence(t, p2)
