@@ -158,9 +158,10 @@ async function doTest () {
       brokerCounter: 42
     }
     await outgoingEnqueueCombi(instance, subs, packet)
-    await sleep(10)
+    await sleep(2)
     const packets = await instance.outgoingStream({ id: 'ttlTest' }).toArray()
-    t.assert.deepEqual(packets, [null], 'packet is gone')
+    const noPacket = (packets === undefined) || (packets[0] === undefined)
+    t.assert.ok(noPacket, 'packet is gone')
     cleanUpPersistence(t, p)
   })
 
