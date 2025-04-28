@@ -72,9 +72,9 @@ async function getRetainedKeys (db, hasClusters) {
     // Get keys of all the masters
     const masters = db.nodes('master')
     const keys = await Promise.all(
-      masters.flatMap((node) => node.keys(ALL_RETAINEDKEYS))
+      masters.map((node) => node.keys(ALL_RETAINEDKEYS))
     )
-    return keys
+    return keys.flat()
   }
   return await db.hkeys(RETAINEDKEY)
 }
@@ -87,8 +87,7 @@ async function getRetainedValue (db, topic, hasClusters) {
 }
 
 async function * createWillStream (db, brokers, maxWills) {
-  const results = await db.lrange(WILLSKEY, 0, maxWills)
-  for (const key of results) {
+  for (const key of await db.lrange(WILLSKEY, 0, maxWills)) {
     const result = await getDecodedValue(db, WILLSKEY, key)
     if (!brokers || !brokers[key.split(':')[1]]) {
       yield result

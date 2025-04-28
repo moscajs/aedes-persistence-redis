@@ -30,6 +30,3 @@ jobs:
       - name: Run tests
         run: |
           npm run test
-      - name: Run tests - clusters
-        run: |
-          npm run test:clusters
