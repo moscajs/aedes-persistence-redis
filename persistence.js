@@ -87,8 +87,7 @@ async function getRetainedValue (db, topic, hasClusters) {
 }
 
 async function * createWillStream (db, brokers, maxWills) {
-  const results = await db.lrange(WILLSKEY, 0, maxWills)
-  for (const key of results) {
+  for (const key of await db.lrange(WILLSKEY, 0, maxWills)) {
     const result = await getDecodedValue(db, WILLSKEY, key)
     if (!brokers || !brokers[key.split(':')[1]]) {
       yield result
@@ -554,8 +553,7 @@ class RedisPersistence extends CachedPersistence {
 }
 
 async function * matchRetained (db, qlobber, hasClusters) {
-  const keys = await getRetainedKeys(db, hasClusters)
-  for (const key of keys) {
+  for (const key of await getRetainedKeys(db, hasClusters)) {
     const topic = hasClusters ? decodeURIComponent(key.split(':')[1]) : key
     if (qlobber.test(topic)) {
       yield getRetainedValue(db, topic, hasClusters)
