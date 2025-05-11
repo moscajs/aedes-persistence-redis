@@ -3,6 +3,7 @@ const persistence = require('../persistence.js')
 const Redis = require('ioredis')
 const mqemitterRedis = require('mqemitter-redis')
 const abs = require('aedes-cached-persistence/abstract')
+const { once } = require('node:events')
 
 const nodes = [
   { host: 'localhost', port: 6378 },
@@ -15,15 +16,6 @@ const nodes = [
 
 function sleep (sec) {
   return new Promise(resolve => setTimeout(resolve, sec * 1000))
-}
-
-function waitForEvent (obj, resolveEvt) {
-  return new Promise((resolve, reject) => {
-    obj.once(resolveEvt, () => {
-      resolve()
-    })
-    obj.once('error', reject)
-  })
 }
 
 function setUpPersistence (t, id, persistenceOpts) {
@@ -54,7 +46,7 @@ function unref () {
 
 async function createDB () {
   const db = new Redis.Cluster(nodes)
-  await waitForEvent(db, 'connect')
+  await once(db, 'connect')
   const dbNodes = db.nodes('master')
   await Promise.all(dbNodes.map(node => { return node.flushdb() }))
   return db
@@ -97,7 +89,7 @@ async function doTest () {
     const p = setUpPersistence(t, '1', {
       conn: externalRedis
     })
-    await waitForEvent(p.instance, 'ready')
+    await once(p.instance, 'ready')
     t.assert.ok(true, 'instance ready')
     t.diagnostic('instance ready')
     externalRedis.disconnect()
@@ -112,6 +104,6 @@ async function doTest () {
     waitForReady: true
   })
   // make sure everything cleans up nicely
-  await sleep(2)
+  await sleep(4)
 }
 doTest()
