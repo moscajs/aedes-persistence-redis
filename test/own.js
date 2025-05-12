@@ -2,82 +2,12 @@ const test = require('node:test')
 const persistence = require('../persistence.js')
 const Redis = require('ioredis')
 const mqemitterRedis = require('mqemitter-redis')
-
-// promisified versions of the instance methods
-// to avoid deep callbacks while testing
-
-async function outgoingEnqueueCombi (instance, subs, packet) {
-  return new Promise((resolve, reject) => {
-    instance.outgoingEnqueueCombi(subs, packet, err => {
-      if (err) {
-        reject(err)
-      } else {
-        resolve()
-      }
-    })
-  })
-}
-
-async function outgoingUpdate (instance, client, packet) {
-  return new Promise((resolve, reject) => {
-    instance.outgoingUpdate(client, packet, (err, reclient, repacket) => {
-      if (err) {
-        reject(err)
-      } else {
-        resolve({ reclient, repacket })
-      }
-    })
-  })
-}
-
-async function subscriptionsByTopic (instance, topic) {
-  return new Promise((resolve, reject) => {
-    instance.subscriptionsByTopic(topic, (err, resubs) => {
-      if (err) {
-        reject(err)
-      } else {
-        resolve(resubs)
-      }
-    })
-  })
-}
-
-async function addSubscriptions (instance, client, subs) {
-  return new Promise((resolve, reject) => {
-    instance.addSubscriptions(client, subs, (err, reClient) => {
-      if (err) {
-        reject(err)
-      } else {
-        resolve(reClient)
-      }
-    })
-  })
-}
-
-async function putWill (instance, client, packet) {
-  return new Promise((resolve, reject) => {
-    instance.putWill(client, packet, (err, reClient) => {
-      if (err) {
-        reject(err)
-      } else {
-        resolve(reClient)
-      }
-    })
-  })
-}
+const { PromisifiedPersistence } = require('aedes-cached-persistence/promisified.js')
+const { once } = require('node:events')
 
 // helpers
 function sleep (sec) {
   return new Promise(resolve => setTimeout(resolve, sec * 1000))
-}
-
-function waitForEvent (obj, resolveEvt) {
-  return new Promise((resolve, reject) => {
-    obj.once(resolveEvt, () => {
-      resolve()
-    })
-    obj.once('error', reject)
-  })
 }
 
 async function setUpPersistence (t, id, persistenceOpts) {
@@ -85,10 +15,11 @@ async function setUpPersistence (t, id, persistenceOpts) {
   const instance = persistence(persistenceOpts)
   instance.broker = toBroker(id, emitter)
   if (!instance.ready) {
-    await waitForEvent(instance, 'ready')
+    await once(instance, 'ready')
   }
   t.diagnostic(`instance ${id} created`)
-  return { instance, emitter, id }
+  const p = new PromisifiedPersistence(instance)
+  return { instance: p, emitter, id }
 }
 
 function cleanUpPersistence (t, { instance, emitter, id }) {
@@ -108,7 +39,7 @@ function toBroker (id, emitter) {
 
 async function createDB () {
   const db = new Redis()
-  await waitForEvent(db, 'connect')
+  await once(db, 'connect')
   await db.flushall()
   return db
 }
@@ -157,7 +88,7 @@ async function doTest () {
       brokerId: instance.broker.id,
       brokerCounter: 42
     }
-    await outgoingEnqueueCombi(instance, subs, packet)
+    await instance.outgoingEnqueueCombi(subs, packet)
     await sleep(2)
     const packets = await instance.outgoingStream({ id: 'ttlTest' }).toArray()
     const noPacket = (packets === undefined) || (packets[0] === undefined)
@@ -194,8 +125,8 @@ async function doTest () {
       messageId: 123
     }
 
-    await outgoingEnqueueCombi(instance, subs, packet)
-    await outgoingUpdate(instance, client, packet)
+    await instance.outgoingEnqueueCombi(subs, packet)
+    await instance.outgoingUpdate(client, packet)
     await sleep(2)
     const exists = await db.exists('packet:1:42')
     t.assert.ok(!exists, 'packet key should have expired')
@@ -239,9 +170,9 @@ async function doTest () {
       nl: undefined
     }]
 
-    await addSubscriptions(instance, client, subs)
+    await instance.addSubscriptions(client, subs)
     await sleep(2)
-    const resubs = await subscriptionsByTopic(instance2, 'hello')
+    const resubs = await instance2.subscriptionsByTopic('hello')
     t.assert.deepEqual(resubs, expected, 'received correct subs')
 
     cleanUpPersistence(t, p1)
@@ -265,7 +196,7 @@ async function doTest () {
     }
 
     try {
-      await outgoingUpdate(instance, client, packet)
+      await instance.outgoingUpdate(client, packet)
     } catch (err) {
       t.assert.ok(err, 'error received')
       t.assert.equal(err.message, 'unknown key', 'Received unknown PUBREC')
@@ -292,8 +223,8 @@ async function doTest () {
       messageId: 123
     }
 
-    await putWill(instance, client, packet)
-    await putWill(instance, client, packet)
+    await instance.putWill(client, packet)
+    await instance.putWill(client, packet)
     const wills = await instance.streamWill().toArray()
     t.assert.equal(wills.length, 1, 'should only be one will')
     cleanUpPersistence(t, p)

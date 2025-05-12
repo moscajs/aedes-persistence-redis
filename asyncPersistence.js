@@ -299,8 +299,8 @@ class AsyncRedisPersistence {
   async countOffline () {
     const count = await this._db.scard(CLIENTSKEY)
     const clientsCount = Number.parseInt(count) || 0
-    const subscriptionsCount = this._trie.subscriptionsCount
-    return { subscriptionsCount, clientsCount }
+    const subsCount = this._trie.subscriptionsCount
+    return { subsCount, clientsCount }
   }
 
   async subscriptionsByTopic (topic) {
@@ -482,6 +482,4 @@ class AsyncRedisPersistence {
   }
 }
 
-module.exports = {
-  AsyncRedisPersistence
-}
+module.exports = AsyncRedisPersistence
