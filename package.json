@@ -63,7 +63,7 @@
     "release-it": "^19.0.2"
   },
   "dependencies": {
-    "aedes-cached-persistence": "^10.1.0",
+    "aedes-cached-persistence": "^10.1.1",
     "hashlru": "^2.3.0",
     "ioredis": "^5.6.1",
     "msgpack-lite": "^0.1.26",
