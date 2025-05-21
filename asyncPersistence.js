@@ -87,11 +87,15 @@ function longestCommonPrefix (patterns) {
 }
 
 function wildCardPosition (pattern) {
+  // return the first position of a wildcard or -1 if one is found
+  // if present wildcard_some is always the last character of the pattern
   const oneIndex = pattern.indexOf(qlobberOpts.wildcard_one)
-  const someIndex = pattern.indexOf(qlobberOpts.wildcard_some)
-  if (oneIndex > someIndex) {
+  // we found oneIndex, so it must be the first one
+  if (oneIndex !== -1) {
     return oneIndex
   }
+  // check for one wildcard_some
+  const someIndex = pattern.indexOf(qlobberOpts.wildcard_some)
   return someIndex
 }
 
