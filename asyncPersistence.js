@@ -1,10 +1,11 @@
 'use strict'
 const Redis = require('ioredis')
 const msgpack = require('msgpack-lite')
-const Packet = require('aedes-cached-persistence').Packet
+const Packet = require('aedes-persistence').Packet
 const HLRU = require('hashlru')
 const { QlobberTrue } = require('qlobber')
-const qlobberOpts = {
+const QlobberSub = require('qlobber/aedes/qlobber-sub')
+const QLOBBER_OPTIONS = {
   separator: '/',
   wildcard_one: '+',
   wildcard_some: '#',
@@ -89,13 +90,13 @@ function longestCommonPrefix (patterns) {
 function wildCardPosition (pattern) {
   // return the first position of a wildcard or -1 if one is found
   // if present wildcard_some is always the last character of the pattern
-  const oneIndex = pattern.indexOf(qlobberOpts.wildcard_one)
+  const oneIndex = pattern.indexOf(QLOBBER_OPTIONS.wildcard_one)
   // we found oneIndex, so it must be the first one
   if (oneIndex !== -1) {
     return oneIndex
   }
   // check for one wildcard_some
-  const someIndex = pattern.indexOf(qlobberOpts.wildcard_some)
+  const someIndex = pattern.indexOf(QLOBBER_OPTIONS.wildcard_some)
   return someIndex
 }
 
@@ -164,7 +165,7 @@ async function * singleMatchRetained (db, prefix, qlobber, sentTopics) {
 
 async function * matchRetained (db, patterns, hasClusters) {
   const wildcards = []
-  const qlobber = new QlobberTrue(qlobberOpts)
+  const qlobber = new QlobberTrue(QLOBBER_OPTIONS)
   const sentTopics = new Set()
 
   for (const p of patterns) {
@@ -285,6 +286,7 @@ function augmentWithBrokerData (that, client, packet) {
 
 class AsyncRedisPersistence {
   constructor (opts = {}) {
+    this._trie = new QlobberSub(QLOBBER_OPTIONS)
     this.maxSessionDelivery = opts.maxSessionDelivery || 1000
     this.maxWills = 10000
     this.packetTTL = opts.packetTTL || (() => { return 0 })
@@ -298,6 +300,7 @@ class AsyncRedisPersistence {
     }
 
     this.hasClusters = !!opts.cluster
+    this.broadcastSubscriptions = true
   }
   /* private methods start with a # */
 

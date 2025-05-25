@@ -2,7 +2,7 @@ const test = require('node:test')
 const persistence = require('../persistence.js')
 const Redis = require('ioredis')
 const mqemitterRedis = require('mqemitter-redis')
-const { PromisifiedPersistence } = require('aedes-cached-persistence/promisified.js')
+const { PromisifiedPersistence } = require('aedes-persistence/promisified.js')
 const { once } = require('node:events')
 
 // helpers

@@ -2,7 +2,7 @@ const test = require('node:test')
 const persistence = require('../persistence.js')
 const Redis = require('ioredis')
 const mqemitterRedis = require('mqemitter-redis')
-const abs = require('aedes-cached-persistence/abstract')
+const abs = require('aedes-persistence/abstract')
 const { once } = require('node:events')
 
 const nodes = [
