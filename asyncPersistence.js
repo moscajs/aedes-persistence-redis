@@ -2,6 +2,7 @@
 const Redis = require('ioredis')
 const msgpack = require('msgpack-lite')
 const Packet = require('aedes-persistence').Packet
+const BroadcastPersistence = require('aedes-persistence/broadcastPersistence.js')
 const HLRU = require('hashlru')
 const { QlobberTrue } = require('qlobber')
 const QlobberSub = require('qlobber/aedes/qlobber-sub')
@@ -304,12 +305,15 @@ class AsyncRedisPersistence {
   }
   /* private methods start with a # */
 
-  async setup () {
+  async setup (broker) {
+    this.broker = broker
+    this.broadcast = new BroadcastPersistence(broker, this._trie)
     const clientIds = await this._db.smembers(CLIENTSKEY)
     for await (const clientId of clientIds) {
       const clientHash = await this._db.hgetallBuffer(clientSubKey(clientId))
       processKeysForClient(clientId, clientHash, this._trie)
     }
+    await this.broadcast.brokerSubscribe()
   }
 
   /**
@@ -357,6 +361,7 @@ class AsyncRedisPersistence {
 
     await this._db.sadd(CLIENTSKEY, client.id)
     await this._db.hmsetBuffer(clientSubKey(client.id), toStore)
+    await this.broadcast.addedSubscriptions(client, subs)
   }
 
   async removeSubscriptions (client, subs) {
@@ -370,6 +375,7 @@ class AsyncRedisPersistence {
       await this._db.del(outgoingKey(client.id))
       await this._db.srem(CLIENTSKEY, client.id)
     }
+    await this.broadcast.removedSubscriptions(client, subs)
   }
 
   async subscriptionsByClient (client) {
@@ -386,6 +392,14 @@ class AsyncRedisPersistence {
 
   async subscriptionsByTopic (topic) {
     return this._trie.match(topic)
+  }
+
+  async cleanSubscriptions (client) {
+    const subs = await this.subscriptionsByClient(client)
+    if (subs.length > 0) {
+      const remSubs = subs.map(sub => sub.topic)
+      await this.removeSubscriptions(client, remSubs)
+    }
   }
 
   async outgoingEnqueue (sub, packet) {
@@ -559,6 +573,7 @@ class AsyncRedisPersistence {
   }
 
   async destroy (cb) {
+    await this.broadcast.brokerUnsubscribe()
     await this._db.disconnect()
   }
 }
