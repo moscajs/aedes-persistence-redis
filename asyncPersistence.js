@@ -228,22 +228,22 @@ function processKeysForClient (clientId, clientHash, trie) {
   }
 }
 
-async function updateWithClientData (that, client, packet) {
+async function updateWithClientData (db, messageIdCache, packetTTL, client, packet) {
   const clientListKey = outgoingKey(client.id)
   const messageIdKey = outgoingIdKey(client.id, packet.messageId)
   const pktKey = packetKey(packet.brokerId, packet.brokerCounter)
 
-  const ttl = that.packetTTL(packet)
+  const ttl = packetTTL(packet)
   if (packet.cmd && packet.cmd !== 'pubrel') { // qos=1
-    that.messageIdCache.set(messageIdKey, pktKey)
+    messageIdCache.set(messageIdKey, pktKey)
     if (ttl > 0) {
-      const result = await that._db.set(pktKey, msgpack.encode(packet), 'EX', ttl)
+      const result = await db.set(pktKey, msgpack.encode(packet), 'EX', ttl)
       if (result !== 'OK') {
         throw new Error('no such packet')
       }
       return
     }
-    const result = await that._db.set(pktKey, msgpack.encode(packet))
+    const result = await db.set(pktKey, msgpack.encode(packet))
     if (result !== 'OK') {
       throw new Error('no such packet')
     }
@@ -252,31 +252,31 @@ async function updateWithClientData (that, client, packet) {
 
   // qos=2
   const clientUpdateKey = outgoingByBrokerKey(client.id, packet.brokerId, packet.brokerCounter)
-  that.messageIdCache.set(messageIdKey, clientUpdateKey)
+  messageIdCache.set(messageIdKey, clientUpdateKey)
 
-  const removed = await that._db.lrem(clientListKey, 0, pktKey)
+  const removed = await db.lrem(clientListKey, 0, pktKey)
   if (removed === 1) {
-    await that._db.rpush(clientListKey, clientUpdateKey)
+    await db.rpush(clientListKey, clientUpdateKey)
   }
 
   const encoded = msgpack.encode(packet)
   if (ttl > 0) {
-    const result = await that._db.set(clientUpdateKey, encoded, 'EX', ttl)
+    const result = await db.set(clientUpdateKey, encoded, 'EX', ttl)
     if (result !== 'OK') {
       throw new Error('no such packet')
     }
     return
   }
-  const result = await that._db.set(clientUpdateKey, encoded)
+  const result = await db.set(clientUpdateKey, encoded)
   if (result !== 'OK') {
     throw new Error('no such packet')
   }
 }
 
-function augmentWithBrokerData (that, client, packet) {
+function augmentWithBrokerData (messageIdCache, client, packet) {
   const messageIdKey = outgoingIdKey(client.id, packet.messageId)
 
-  const key = that.messageIdCache.get(messageIdKey)
+  const key = messageIdCache.get(messageIdKey)
   if (!key) {
     throw new Error('unknown key')
   }
@@ -286,34 +286,51 @@ function augmentWithBrokerData (that, client, packet) {
 }
 
 class AsyncRedisPersistence {
-  constructor (opts = {}) {
-    this._trie = new QlobberSub(QLOBBER_OPTIONS)
-    this.maxSessionDelivery = opts.maxSessionDelivery || 1000
-    this.maxWills = 10000
-    this.packetTTL = opts.packetTTL || (() => { return 0 })
+  #trie
+  #maxSessionDelivery
+  #maxWills
+  #packetTTL
+  #messageIdCache
+  #db
+  #hasClusters
+  #broadcast
+  #broker
+  #destroyed
 
-    this.messageIdCache = HLRU(100000)
+  constructor (opts = {}) {
+    this.#trie = new QlobberSub(QLOBBER_OPTIONS)
+    this.#destroyed = false
+    this.#maxSessionDelivery = opts.maxSessionDelivery || 1000
+    this.#maxWills = 10000
+    this.#packetTTL = opts.packetTTL || (() => { return 0 })
+
+    this.#messageIdCache = HLRU(100000)
 
     if (opts.cluster && Array.isArray(opts.cluster)) {
-      this._db = new Redis.Cluster(opts.cluster)
+      this.#db = new Redis.Cluster(opts.cluster)
     } else {
-      this._db = opts.conn || new Redis(opts)
+      this.#db = opts.conn || new Redis(opts)
     }
 
-    this.hasClusters = !!opts.cluster
-    this.broadcastSubscriptions = true
+    this.#hasClusters = !!opts.cluster
   }
+
+  // broker getter for testing only
+  get broker () {
+    return this.#broker
+  }
+
   /* private methods start with a # */
 
   async setup (broker) {
-    this.broker = broker
-    this.broadcast = new BroadcastPersistence(broker, this._trie)
-    const clientIds = await this._db.smembers(CLIENTSKEY)
+    this.#broker = broker
+    this.#broadcast = new BroadcastPersistence(broker, this.#trie)
+    const clientIds = await this.#db.smembers(CLIENTSKEY)
     for await (const clientId of clientIds) {
-      const clientHash = await this._db.hgetallBuffer(clientSubKey(clientId))
-      processKeysForClient(clientId, clientHash, this._trie)
+      const clientHash = await this.#db.hgetallBuffer(clientSubKey(clientId))
+      processKeysForClient(clientId, clientHash, this.#trie)
     }
-    await this.broadcast.brokerSubscribe()
+    await this.#broadcast.brokerSubscribe()
   }
 
   /**
@@ -322,22 +339,22 @@ class AsyncRedisPersistence {
    */
   async #storeRetainedCluster (packet) {
     if (packet.payload.length === 0) {
-      await this._db.del(retainedKey(packet.topic))
+      await this.#db.del(retainedKey(packet.topic))
     } else {
-      await this._db.set(retainedKey(packet.topic), msgpack.encode(packet))
+      await this.#db.set(retainedKey(packet.topic), msgpack.encode(packet))
     }
   }
 
   async #storeRetained (packet) {
     if (packet.payload.length === 0) {
-      await this._db.hdel(RETAINEDKEY, packet.topic)
+      await this.#db.hdel(RETAINEDKEY, packet.topic)
     } else {
-      await this._db.hset(RETAINEDKEY, packet.topic, msgpack.encode(packet))
+      await this.#db.hset(RETAINEDKEY, packet.topic, msgpack.encode(packet))
     }
   }
 
   async storeRetained (packet) {
-    if (this.hasClusters) {
+    if (this.#hasClusters) {
       await this.#storeRetainedCluster(packet)
     } else {
       await this.#storeRetained(packet)
@@ -345,7 +362,7 @@ class AsyncRedisPersistence {
   }
 
   createRetainedStreamCombi (patterns) {
-    return matchRetained(this._db, patterns, this.hasClusters)
+    return matchRetained(this.#db, patterns, this.#hasClusters)
   }
 
   createRetainedStream (pattern) {
@@ -359,39 +376,39 @@ class AsyncRedisPersistence {
       toStore[sub.topic] = msgpack.encode(sub)
     }
 
-    await this._db.sadd(CLIENTSKEY, client.id)
-    await this._db.hmsetBuffer(clientSubKey(client.id), toStore)
-    await this.broadcast.addedSubscriptions(client, subs)
+    await this.#db.sadd(CLIENTSKEY, client.id)
+    await this.#db.hmsetBuffer(clientSubKey(client.id), toStore)
+    await this.#broadcast.addedSubscriptions(client, subs)
   }
 
   async removeSubscriptions (client, subs) {
     const clientSK = clientSubKey(client.id)
     // Remove the subscriptions from the client's subscription hash
-    await this._db.hdel(clientSK, subs)
+    await this.#db.hdel(clientSK, subs)
     // Check if the client still has any subscriptions
-    const subCount = await this._db.exists(clientSK)
+    const subCount = await this.#db.exists(clientSK)
     if (subCount === 0) {
       // If no subscriptions remain, clean up the client's data
-      await this._db.del(outgoingKey(client.id))
-      await this._db.srem(CLIENTSKEY, client.id)
+      await this.#db.del(outgoingKey(client.id))
+      await this.#db.srem(CLIENTSKEY, client.id)
     }
-    await this.broadcast.removedSubscriptions(client, subs)
+    await this.#broadcast.removedSubscriptions(client, subs)
   }
 
   async subscriptionsByClient (client) {
-    const subs = await this._db.hgetallBuffer(clientSubKey(client.id))
+    const subs = await this.#db.hgetallBuffer(clientSubKey(client.id))
     return subsForClient(subs)
   }
 
   async countOffline () {
-    const count = await this._db.scard(CLIENTSKEY)
+    const count = await this.#db.scard(CLIENTSKEY)
     const clientsCount = Number.parseInt(count) || 0
-    const subsCount = this._trie.subscriptionsCount
+    const subsCount = this.#trie.subscriptionsCount
     return { subsCount, clientsCount }
   }
 
   async subscriptionsByTopic (topic) {
-    return this._trie.match(topic)
+    return this.#trie.match(topic)
   }
 
   async cleanSubscriptions (client) {
@@ -413,49 +430,49 @@ class AsyncRedisPersistence {
 
     const pktKey = packetKey(packet.brokerId, packet.brokerCounter)
     const countKey = packetCountKey(packet.brokerId, packet.brokerCounter)
-    const ttl = this.packetTTL(packet)
+    const ttl = this.#packetTTL(packet)
 
     const encoded = msgpack.encode(new Packet(packet))
 
-    if (this.hasClusters) {
+    if (this.#hasClusters) {
       // do not do this using `mset`, fails in clusters
-      await this._db.set(pktKey, encoded)
-      await this._db.set(countKey, subs.length)
+      await this.#db.set(pktKey, encoded)
+      await this.#db.set(countKey, subs.length)
     } else {
-      await this._db.mset(pktKey, encoded, countKey, subs.length)
+      await this.#db.mset(pktKey, encoded, countKey, subs.length)
     }
 
     if (ttl > 0) {
-      await this._db.expire(pktKey, ttl)
-      await this._db.expire(countKey, ttl)
+      await this.#db.expire(pktKey, ttl)
+      await this.#db.expire(countKey, ttl)
     }
 
     for (const sub of subs) {
       const listKey = outgoingKey(sub.clientId)
-      await this._db.rpush(listKey, pktKey)
+      await this.#db.rpush(listKey, pktKey)
     }
   }
 
   async outgoingUpdate (client, packet) {
     if (!('brokerId' in packet && 'messageId' in packet)) {
-      augmentWithBrokerData(this, client, packet)
+      augmentWithBrokerData(this.#messageIdCache, client, packet)
     }
-    await updateWithClientData(this, client, packet)
+    await updateWithClientData(this.#db, this.#messageIdCache, this.#packetTTL, client, packet)
   }
 
   async outgoingClearMessageId (client, packet) {
     const clientListKey = outgoingKey(client.id)
     const messageIdKey = outgoingIdKey(client.id, packet.messageId)
 
-    const clientKey = this.messageIdCache.get(messageIdKey)
-    this.messageIdCache.remove(messageIdKey)
+    const clientKey = this.#messageIdCache.get(messageIdKey)
+    this.#messageIdCache.remove(messageIdKey)
 
     if (!clientKey) {
       return
     }
 
     // TODO can be cached in case of wildcard deliveries
-    const buf = await this._db.getBuffer(clientKey)
+    const buf = await this.#db.getBuffer(clientKey)
 
     let origPacket
     let pktKey
@@ -469,19 +486,19 @@ class AsyncRedisPersistence {
       countKey = packetCountKey(origPacket.brokerId, origPacket.brokerCounter)
 
       if (clientKey !== pktKey) { // qos=2
-        await this._db.del(clientKey)
+        await this.#db.del(clientKey)
       }
     }
-    await this._db.lrem(clientListKey, 0, pktKey)
+    await this.#db.lrem(clientListKey, 0, pktKey)
 
-    const remained = await this._db.decr(countKey)
+    const remained = await this.#db.decr(countKey)
     if (remained === 0) {
-      if (this.hasClusters) {
+      if (this.#hasClusters) {
         // do not remove multiple keys at once, fails in clusters
-        await this._db.del(pktKey)
-        await this._db.del(countKey)
+        await this.#db.del(pktKey)
+        await this.#db.del(countKey)
       } else {
-        await this._db.del(pktKey, countKey)
+        await this.#db.del(pktKey, countKey)
       }
     }
     return origPacket
@@ -489,8 +506,8 @@ class AsyncRedisPersistence {
 
   outgoingStream (client) {
     const clientListKey = outgoingKey(client.id)
-    const db = this._db
-    const maxSessionDelivery = this.maxSessionDelivery
+    const db = this.#db
+    const maxSessionDelivery = this.#maxSessionDelivery
 
     async function * lrangeResult () {
       for (const key of await db.lrange(clientListKey, 0, maxSessionDelivery)) {
@@ -505,12 +522,12 @@ class AsyncRedisPersistence {
     const key = incomingKey(client.id, packet.messageId)
     const newp = new Packet(packet)
     newp.messageId = packet.messageId
-    await this._db.set(key, msgpack.encode(newp))
+    await this.#db.set(key, msgpack.encode(newp))
   }
 
   async incomingGetPacket (client, packet) {
     const key = incomingKey(client.id, packet.messageId)
-    const buf = await this._db.getBuffer(key)
+    const buf = await this.#db.getBuffer(key)
     if (!buf) {
       throw new Error('no such packet')
     }
@@ -519,53 +536,53 @@ class AsyncRedisPersistence {
 
   async incomingDelPacket (client, packet) {
     const key = incomingKey(client.id, packet.messageId)
-    await this._db.del(key)
+    await this.#db.del(key)
   }
 
   async putWill (client, packet) {
-    const key = willKey(this.broker.id, client.id)
+    const key = willKey(this.#broker.id, client.id)
     packet.clientId = client.id
-    packet.brokerId = this.broker.id
-    this._db.lrem(WILLSKEY, 0, key) // Remove duplicates
-    this._db.rpush(WILLSKEY, key)
-    await this._db.setBuffer(key, msgpack.encode(packet))
+    packet.brokerId = this.#broker.id
+    this.#db.lrem(WILLSKEY, 0, key) // Remove duplicates
+    this.#db.rpush(WILLSKEY, key)
+    await this.#db.setBuffer(key, msgpack.encode(packet))
   }
 
   async getWill (client) {
-    const key = willKey(this.broker.id, client.id)
-    const packet = await this._db.getBuffer(key)
+    const key = willKey(this.#broker.id, client.id)
+    const packet = await this.#db.getBuffer(key)
     const result = packet ? msgpack.decode(packet) : null
     return result
   }
 
   async delWill (client) {
     const key = willKey(client.brokerId, client.id)
-    this._db.lrem(WILLSKEY, 0, key)
-    const packet = await this._db.getBuffer(key)
+    this.#db.lrem(WILLSKEY, 0, key)
+    const packet = await this.#db.getBuffer(key)
     const result = packet ? msgpack.decode(packet) : null
-    await this._db.del(key)
+    await this.#db.del(key)
     return result
   }
 
   streamWill (brokers) {
-    return createWillStream(this._db, brokers, this.maxWills)
+    return createWillStream(this.#db, brokers, this.#maxWills)
   }
 
   getClientList (topic) {
-    const entries = this._trie.match(topic, topic)
+    const entries = this.#trie.match(topic, topic)
     return getClientIdFromEntries(entries)
   }
 
   #buildAugment (listKey) {
     const that = this
     return function decodeAndAugment (key, enc, cb) {
-      that._db.getBuffer(key, function decodeMessage (err, result) {
+      that.#db.getBuffer(key, function decodeMessage (err, result) {
         let decoded
         if (result) {
           decoded = msgpack.decode(result)
         }
         if (err || !decoded) {
-          that._db.lrem(listKey, 0, key)
+          that.#db.lrem(listKey, 0, key)
         }
         cb(err, decoded)
       })
@@ -573,8 +590,12 @@ class AsyncRedisPersistence {
   }
 
   async destroy (cb) {
-    await this.broadcast.brokerUnsubscribe()
-    await this._db.disconnect()
+    if (this.#destroyed) {
+      throw new Error('destroyed called twice!')
+    }
+    this.#destroyed = true
+    await this.#broadcast.brokerUnsubscribe()
+    await this.#db.disconnect()
   }
 }
 
