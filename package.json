@@ -60,10 +60,10 @@
     "mqemitter-redis": "^7.0.0",
     "mqtt": "^5.13.0",
     "neostandard": "^0.12.1",
-    "release-it": "^19.0.2"
+    "release-it": "^19.0.3"
   },
   "dependencies": {
-    "aedes-persistence": "github:seriousme/aedes-persistence#asyncify",
+    "aedes-persistence": "^10.2.0",
     "hashlru": "^2.3.0",
     "ioredis": "^5.6.1",
     "msgpack-lite": "^0.1.26",
