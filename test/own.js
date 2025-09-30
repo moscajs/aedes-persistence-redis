@@ -229,5 +229,29 @@ async function doTest () {
     t.assert.equal(wills.length, 1, 'should only be one will')
     cleanUpPersistence(t, p)
   })
+
+  test('lrange delivers key with no value', async t => {
+    t.plan(1)
+    await cleanDB()
+
+    const Redis = require('ioredis')
+    const db = new Redis()
+    await once(db, 'connect')
+    const clientId = 'ghostClient'
+    const listKey = 'outgoing:' + encodeURIComponent(clientId)
+    // we just add a key to the list with no associated packet
+    await db.rpush(listKey, 'ghostKey')
+
+    const p = await setUpPersistence(t, 'ghost', { conn: db })
+    const instance = p.instance
+    const packets = []
+    for await (const pkt of instance.outgoingStream({ id: clientId })) {
+      packets.push(pkt)
+    }
+    t.assert.equal(packets.length, 0, 'no packets should be delivered')
+    await db.del(listKey)
+    cleanUpPersistence(t, p)
+    db.disconnect()
+  })
 }
 doTest()

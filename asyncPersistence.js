@@ -511,7 +511,10 @@ class AsyncRedisPersistence {
 
     async function * lrangeResult () {
       for (const key of await db.lrange(clientListKey, 0, maxSessionDelivery)) {
-        yield getDecodedValue(db, clientListKey, key)
+        const decoded = await getDecodedValue(db, clientListKey, key)
+        if (decoded !== undefined) {
+          yield decoded
+        }
       }
     }
 
