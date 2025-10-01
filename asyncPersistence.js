@@ -111,7 +111,7 @@ async function getRetainedValue (db, topic, hasClusters) {
 async function * createWillStream (db, brokers, maxWills) {
   for (const key of await db.lrange(WILLSKEY, 0, maxWills)) {
     const result = await getDecodedValue(db, WILLSKEY, key)
-    if (!brokers || !brokers[key.split(':')[1]]) {
+    if ((result !== undefined) && (!brokers || !brokers[key.split(':')[1]])) {
       yield result
     }
   }
@@ -511,7 +511,10 @@ class AsyncRedisPersistence {
 
     async function * lrangeResult () {
       for (const key of await db.lrange(clientListKey, 0, maxSessionDelivery)) {
-        yield getDecodedValue(db, clientListKey, key)
+        const decoded = await getDecodedValue(db, clientListKey, key)
+        if (decoded !== undefined) {
+          yield decoded
+        }
       }
     }
 
