@@ -83,7 +83,7 @@ aedesPersistenceRedis({
 
 v12 stores incoming (QoS 2) packets in one hash per client instead of one key
 per message, so `cleanIncoming` can drop them with a single `DEL`. See
-[UPGRADE.md](UPGRADE.md).
+[UPGRADE.md](UPGRADE.md) for the rolling-upgrade and migration notes.
 
 ### Changes in v4.x
 

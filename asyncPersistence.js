@@ -546,6 +546,8 @@ class AsyncRedisPersistence {
 
   async cleanIncoming (client) {
     // Single-key DEL: no keyspace scan, and slot-safe on a cluster.
+    // DEL rather than UNLINK because UNLINK needs Redis 4.0 and the cluster
+    // this is tested against is older.
     await this.#db.del(incomingKey(client.id))
   }
 
