@@ -41,6 +41,32 @@ async function from9to10 (db, cb) {
   })
 }
 
+// v12 moved incoming (QoS 2) packets from one string key per messageId
+// (`incoming:<clientId>:<messageId>`) into one hash per client
+// (`incoming:<clientId>`), so that `cleanIncoming` is a single DEL.
+// The old keys are unreachable afterwards; this removes them.
+// Incoming packets are in-flight state only, so nothing worth keeping is lost.
+// On a cluster, run this once against each master node.
+async function from11to12 (db, cb) {
+  try {
+    let cursor = '0'
+    do {
+      const [next, keys] = await db.scan(cursor, 'MATCH', 'incoming:*', 'COUNT', 1000)
+      cursor = next
+      for (const key of keys) {
+        // The new per-client keys are hashes; only the old ones are strings.
+        if (await db.type(key) === 'string') {
+          await db.unlink(key)
+        }
+      }
+    } while (cursor !== '0')
+    cb(null)
+  } catch (err) {
+    cb(err)
+  }
+}
+
 module.exports = {
-  from9to10
+  from9to10,
+  from11to12
 }

@@ -43,8 +43,10 @@ function outgoingIdKey (clientId, messageId) {
   return `${OUTGOINGIDKEY}${encodeURIComponent(clientId)}:${messageId}`
 }
 
-function incomingKey (clientId, messageId) {
-  return `${INCOMINGKEY}${encodeURIComponent(clientId)}:${messageId}`
+// All of a client's incoming (QoS 2) packets live in one hash, keyed by
+// messageId, so the whole set can be dropped with a single DEL.
+function incomingKey (clientId) {
+  return `${INCOMINGKEY}${encodeURIComponent(clientId)}`
 }
 
 function packetKey (brokerId, brokerCounter) {
@@ -522,15 +524,15 @@ class AsyncRedisPersistence {
   }
 
   async incomingStorePacket (client, packet) {
-    const key = incomingKey(client.id, packet.messageId)
+    const key = incomingKey(client.id)
     const newp = new Packet(packet)
     newp.messageId = packet.messageId
-    await this.#db.set(key, msgpack.encode(newp))
+    await this.#db.hset(key, packet.messageId, msgpack.encode(newp))
   }
 
   async incomingGetPacket (client, packet) {
-    const key = incomingKey(client.id, packet.messageId)
-    const buf = await this.#db.getBuffer(key)
+    const key = incomingKey(client.id)
+    const buf = await this.#db.hgetBuffer(key, packet.messageId)
     if (!buf) {
       throw new Error('no such packet')
     }
@@ -538,8 +540,13 @@ class AsyncRedisPersistence {
   }
 
   async incomingDelPacket (client, packet) {
-    const key = incomingKey(client.id, packet.messageId)
-    await this.#db.del(key)
+    const key = incomingKey(client.id)
+    await this.#db.hdel(key, packet.messageId)
+  }
+
+  async cleanIncoming (client) {
+    // Single-key DEL: no keyspace scan, and slot-safe on a cluster.
+    await this.#db.del(incomingKey(client.id))
   }
 
   async putWill (client, packet) {
