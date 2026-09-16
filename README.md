@@ -79,6 +79,12 @@ aedesPersistenceRedis({
 })
 ```
 
+### Changes in v12.x
+
+v12 stores incoming (QoS 2) packets in one hash per client instead of one key
+per message, so `cleanIncoming` can drop them with a single `DEL`. See
+[UPGRADE.md](UPGRADE.md) for the rolling-upgrade and migration notes.
+
 ### Changes in v4.x
 
 v4 has changed the subscriptions key schema to enhance performance. Please check [related PR](https://github.com/moscajs/aedes-persistence-redis/pull/31) for more details.
